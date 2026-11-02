@@ -587,11 +587,10 @@ export function initMugen(socket, getMe, pushSystem, scope = createGameScope()) 
     const match = state.match;
     if (!match || match.roomId !== roomId || match.reported) return;
     match.reported = true;
+    const hasWinner = outcome.winSide === 0 || outcome.winSide === 1;
     socket.emit(
       'mugen:result',
-      outcome.winSide === 0 || outcome.winSide === 1
-        ? { roomId, winSide: outcome.winSide }
-        : { roomId, aborted: true },
+      hasWinner ? { roomId, winSide: outcome.winSide } : { roomId, aborted: true },
     );
     if (outcome.code !== 0 && outcome.errors.length) notice(outcome.errors.at(-1));
     moveList.setCharacters([]);
@@ -601,7 +600,12 @@ export function initMugen(socket, getMe, pushSystem, scope = createGameScope()) 
         'match',
         el('div', { class: 'mugen-result' }, [
           el('p', {
-            text: tr('games.mugen.waitingResult', 'Waiting for the result…'),
+            text: hasWinner
+              ? tr('games.mugen.waitingResult', 'Waiting for the result…')
+              : tr(
+                  'games.mugen.interruptedResult',
+                  'The fight was interrupted. Waiting for confirmation…',
+                ),
           }),
         ]),
       );

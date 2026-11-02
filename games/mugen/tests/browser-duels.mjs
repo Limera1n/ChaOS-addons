@@ -23,7 +23,7 @@ app.get('/', (_request, response) =>
 <div id="mugen-body" style="height:650px"></div>
 <script src="/socket.io/socket.io.js"></script><script type="module">
 import { initMugen } from '/games/mugen/client/index.js';
-window.notices=[]; window.received=[]; window.socket=io();
+window.notices=[]; window.received=[]; window.socket=io({auth:{accountId:location.hash.slice(1)}});
 socket.onAny((event,payload)=>received.push({event,payload}));
 window.controller=initMugen(socket,()=>null,message=>notices.push(message));
 </script>`),
@@ -34,13 +34,23 @@ const users = new Map();
 const runtime = createMugenRuntime({ catalog, users });
 runtime.init(io);
 io.on('connection', (socket) => {
-  const user = { userId: socket.id, pseudo: socket.id, clients: new Set([socket]), points: 0 };
-  users.set(socket.id, user);
-  runtime.wire(socket, { user, accountId: socket.id });
+  const accountId = socket.handshake.auth.accountId;
+  const user = users.get(accountId) ?? {
+    userId: accountId,
+    pseudo: accountId,
+    clients: new Set(),
+    points: 0,
+  };
+  user.clients.add(socket);
+  users.set(accountId, user);
+  runtime.wire(socket, { user, accountId });
   socket.on('disconnect', () => {
     runtime.onSocketDisconnect(socket);
-    runtime.onUserDisconnect(socket.id);
-    users.delete(socket.id);
+    user.clients.delete(socket);
+    if (!user.clients.size) {
+      runtime.onUserDisconnect(accountId);
+      users.delete(accountId);
+    }
   });
 });
 let browser;
@@ -49,19 +59,20 @@ try {
   await new Promise((done) => server.listen(0, '127.0.0.1', done));
   browser = await startBrowser({ commandTimeout: 60000 });
   const url = 'http://127.0.0.1:' + server.address().port;
-  const openPlayer = async () => {
+  const openPlayer = async (accountId) => {
     const { targetId } = await browser.send('Target.createTarget', {
       url: 'about:blank',
       newWindow: process.argv.includes('--separate-windows'),
     });
     const page = await browser.attach(targetId);
-    await page.command('Page.navigate', { url });
+    await page.command('Page.navigate', { url: url + '#' + accountId });
     return page;
   };
-  const host = await openPlayer(),
-    guest = await openPlayer();
-  pages.push(host, guest);
-  for (const page of [host, guest]) await page.wait('!!window.controller', 'controller');
+  const host = await openPlayer('host'),
+    guest = await openPlayer('guest'),
+    otherHostTab = await openPlayer('host');
+  pages.push(host, guest, otherHostTab);
+  for (const page of pages) await page.wait('!!window.controller', 'controller');
   await host.evaluate("void socket.emit('mugen:create',{bet:0})");
   const created = await host.wait(
     "received.find(item=>item.event==='mugen:created')?.payload",
@@ -87,6 +98,13 @@ try {
   }
   assert.deepEqual(await host.evaluate('notices'), []);
   assert.deepEqual(await guest.evaluate('notices'), []);
+  assert.equal(
+    await otherHostTab.evaluate(
+      "received.some(item => item.event === 'mugen:start' || item.event === 'mugen:input')",
+    ),
+    false,
+    'another tab on the same account cannot start or receive a second engine stream',
+  );
   for (const page of [host, guest]) await page.evaluate(`(${installNativeGamepad.toString()})()`);
   await host.evaluate(
     "Object.assign(document.querySelector('iframe').contentWindow.testGamepad.buttons[0],{pressed:true,value:1}); document.querySelector('iframe').contentWindow.testGamepad.buttons[14].pressed=true; true",

@@ -33,7 +33,9 @@ export function createMugenRuntime({
     wired = new WeakSet(),
     spectators = new Map(),
     replays = createReplays({ now }),
-    packetBudgets = new WeakMap();
+    packetBudgets = new WeakMap(),
+    playerSockets = new WeakMap(),
+    socketAccounts = new WeakMap();
   const lifecycle = createGameLifecycle({
     name: 'mugen',
     codePrefix: 'MUGEN',
@@ -221,12 +223,26 @@ export function createMugenRuntime({
       stage,
     };
     // The creator hosts: Ikemen's host is always side 1.
-    emitToPlayers(room.players, 'mugen:start', (_player, slot) => ({
-      ...match,
-      slot,
-      role: slot === 0 ? 'host' : 'guest',
-    }));
+    room.players.forEach((player, slot) => {
+      const socket = getPlayerSocket(room, player.accountId);
+      playerSockets.get(room).set(player.accountId, socket);
+      socket?.emit('mugen:start', {
+        ...match,
+        slot,
+        role: slot === 0 ? 'host' : 'guest',
+      });
+    });
     namespace.emit('mugen:live_open', fightMgr._pub(room));
+  }
+
+  function getPlayerSocket(room, accountId) {
+    // A second tab must never feed another native engine into the same stream.
+    return (
+      playerSockets.get(room)?.get(accountId) ??
+      [...(users.get(accountId)?.clients ?? [])].find(
+        (client) => wired.has(client) && client.connected !== false,
+      )
+    );
   }
 
   function pickStage() {
@@ -334,6 +350,8 @@ export function createMugenRuntime({
       if (!result.ok) return;
       const room = fightMgr.getRoom(roomId);
       if (!room) return;
+      if (!playerSockets.has(room)) playerSockets.set(room, new Map());
+      playerSockets.get(room).set(accountId, socket);
       emitToPlayers(room.players, 'mugen:char_picked', {
         slot: result.slot,
         character,
@@ -350,10 +368,12 @@ export function createMugenRuntime({
       // 0: engine byte stream, 1: rollback datagrams, 2: bridge control.
       if (!roomId || ![0, 1, 2].includes(channel)) return;
       if (!Buffer.isBuffer(data) || data.length === 0 || data.length > MAX_PACKET_BYTES) return;
+      const room = fightMgr.getRoom(roomId);
+      if (!room || room.state !== 'playing' || getPlayerSocket(room, accountId) !== socket) return;
       if (!withinBudget(socket)) return;
       const opponent = fightMgr.opponentOf(accountId, roomId);
       if (opponent)
-        emitToUser(opponent.accountId, 'mugen:input', {
+        getPlayerSocket(room, opponent.accountId)?.emit('mugen:input', {
           roomId,
           channel,
           data,
@@ -364,6 +384,8 @@ export function createMugenRuntime({
       if (!user) return;
       const roomId = roomIdOf(payload);
       if (!roomId) return;
+      const room = fightMgr.getRoom(roomId);
+      if (!room || getPlayerSocket(room, accountId) !== socket) return;
       const outcome =
         payload?.winSide === 0 || payload?.winSide === 1
           ? { winSide: payload.winSide }
@@ -376,7 +398,8 @@ export function createMugenRuntime({
       if (!user) return;
       const roomId = roomIdOf(payload);
       const room = roomId ? fightMgr.getRoom(roomId) : null;
-      if (room) forfeit(room, accountId);
+      if (!room || (room.state === 'playing' && getPlayerSocket(room, accountId) !== socket)) return;
+      forfeit(room, accountId);
     });
 
     lifecycle.onSocket(socket, 'mugen:spectate', (payload) => {
@@ -417,6 +440,7 @@ export function createMugenRuntime({
       const roomId = roomIdOf(payload);
       const room = roomId ? fightMgr.getRoom(roomId) : null;
       if (!room || room.state !== 'playing' || room.players[0].accountId !== accountId) return;
+      if (getPlayerSocket(room, accountId) !== socket) return;
       const chunk = replays.push(roomId, payload);
       if (chunk) emitToSpectators(roomId, 'mugen:replay', chunk);
       else if (replays.invalid(roomId) && spectators.has(roomId)) {
@@ -437,12 +461,20 @@ export function createMugenRuntime({
     return lifecycle.run(() => {
       if (wired.has(socket)) return false;
       wired.add(socket);
+      socketAccounts.set(socket, context.accountId);
       wireSocket(socket, context);
       return true;
     });
   }
   function onSocketDisconnect(socket) {
     return lifecycle.safely(() => {
+      const accountId = socketAccounts.get(socket);
+      const room = accountId ? fightMgr.findPlayerRoom(accountId) : null;
+      if (room && playerSockets.get(room)?.get(accountId) === socket) {
+        if (room.state === 'playing') forfeit(room, accountId);
+        else playerSockets.get(room).delete(accountId);
+      }
+      socketAccounts.delete(socket);
       removeSpectator(socket);
       lifecycle.disposeSocket(socket);
     });

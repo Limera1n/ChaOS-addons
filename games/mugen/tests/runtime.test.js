@@ -198,6 +198,61 @@ test('MUGEN refuses a duel when no stage is installed', async (t) => {
   assert.equal(room.state, 'lobby');
 });
 
+test('MUGEN one tab owns each funded engine, its input, replay and result', async (t) => {
+  const value = await fixture(t);
+  const tabs = value.players.slice(0, 2).map(({ user, account }) => {
+    const socket = new Socket();
+    user.clients.add(socket);
+    value.runtime.wire(socket, { user, accountId: account.id });
+    return socket;
+  });
+  const room = value.start();
+  for (const socket of tabs) assert.equal(socket.all('mugen:start').length, 0);
+  for (const { socket } of value.players.slice(0, 2))
+    assert.equal(socket.all('mugen:start').length, 1);
+  const packet = { roomId: room.id, channel: 0, data: Buffer.from([1, 2, 3]) };
+  tabs[0].receive('mugen:net', packet);
+  assert.equal(value.players[1].socket.all('mugen:input').length, 0);
+  value.players[0].socket.receive('mugen:net', packet);
+  assert.equal(value.players[1].socket.all('mugen:input').length, 1);
+  assert.equal(tabs[1].all('mugen:input').length, 0);
+  tabs[0].receive('mugen:replay', { roomId: room.id, offset: 0, data: Buffer.from('duplicate') });
+  assert.equal(value.runtime.status().replays, 0);
+  tabs[0].receive('mugen:result', { roomId: room.id, aborted: true });
+  assert.deepEqual(room.results, [null, null]);
+  tabs[0].receive('mugen:forfeit', { roomId: room.id });
+  value.runtime.onSocketDisconnect(tabs[0]);
+  assert.equal(room.state, 'playing', 'closing an inactive tab cannot forfeit the active engine');
+  value.report(room, 0, { winSide: 0 });
+  value.report(room, 1, { winSide: 0 });
+  assert.deepEqual(value.saved(), [1100, 900, 1000]);
+});
+
+test('MUGEN a remaining tab can start a picked lobby but cannot keep a disconnected engine playing', async (t) => {
+  const value = await fixture(t);
+  const { socket: first, user, account } = value.players[0];
+  const tab = new Socket();
+  user.clients.add(tab);
+  value.runtime.wire(tab, { user, accountId: account.id });
+  const room = value.create();
+  first.receive('mugen:select_char', { roomId: room.id, character: 'kfm/kfm.def' });
+  value.runtime.onSocketDisconnect(first);
+  user.clients.delete(first);
+  value.join(room);
+  value.players[1].socket.receive('mugen:select_char', {
+    roomId: room.id,
+    character: 'Ryu/wrapped/ryu.def',
+  });
+  assert.equal(tab.latest('mugen:start').role, 'host');
+  assert.equal(first.all('mugen:start').length, 0);
+  const remaining = new Socket();
+  user.clients.add(remaining);
+  value.runtime.wire(remaining, { user, accountId: account.id });
+  value.runtime.onSocketDisconnect(tab);
+  assert.equal(value.manager.getRoom(room.id), null);
+  assert.deepEqual(value.saved(), [900, 1100, 1000]);
+});
+
 test('MUGEN relays netplay bytes to the opponent only, within limits', async (t) => {
   const value = await fixture(t),
     room = value.create();
