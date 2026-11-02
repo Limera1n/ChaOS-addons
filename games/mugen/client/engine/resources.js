@@ -24,7 +24,7 @@ export function createEngineResources({
   const cacheName =
     'mugen-window-' + (globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`);
   let disk = null;
-  const writes = new Set();
+  const writes = new Map();
   let disposal = null;
 
   function dispose() {
@@ -37,7 +37,7 @@ export function createEngineResources({
     size = 0;
     disposal = (disk ?? Promise.resolve())
       .then(async () => {
-        await Promise.allSettled([...writes]);
+        await Promise.allSettled([...writes.values()]);
         await storage?.delete(cacheName);
       })
       .catch(() => {
@@ -56,6 +56,9 @@ export function createEngineResources({
 
   async function download(url) {
     const cache = await sessionCache();
+    // An evicted RAM entry may still be reaching disk; reuse that write rather
+    // than downloading the same pack again.
+    await writes.get(url);
     let response;
     try {
       response = await cache?.match(url);
@@ -67,12 +70,13 @@ export function createEngineResources({
       if (!response.ok) throw new Error('asset_unavailable');
       const bytes = new Uint8Array(await response.arrayBuffer());
       if (cache && !disposed) {
-        const write = cache.put(url, new Response(bytes)).catch(() => {
-          // Quota exhaustion falls back to the bounded memory cache.
-        });
-        writes.add(write);
-        await write;
-        writes.delete(write);
+        const write = Promise.resolve()
+          .then(() => cache.put(url, new Response(bytes)))
+          .catch(() => {
+            // Quota exhaustion falls back to the bounded memory cache.
+          })
+          .finally(() => writes.delete(url));
+        writes.set(url, write);
       }
       return bytes;
     }

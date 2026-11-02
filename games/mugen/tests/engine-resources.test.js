@@ -44,6 +44,50 @@ test('leaving the page releases its temporary cache and is safe to dispose again
   assert.equal(resources.status().bytes, 0);
 });
 
+test('slow disk writes do not delay engine files, survive RAM eviction and drain before disposal', async () => {
+  const storage = temporaryStorage();
+  const open = storage.open;
+  const { promise: diskReady, resolve: releaseDisk } = Promise.withResolvers();
+  let fetched = 0;
+  storage.open = async (name) => {
+    const cache = await open(name);
+    return {
+      ...cache,
+      async put(url, response) {
+        await diskReady;
+        return cache.put(url, response);
+      },
+    };
+  };
+  const resources = createEngineResources({
+    storage,
+    maxBytes: 0,
+    fetch: async () => {
+      fetched++;
+      return new Response('fighter');
+    },
+  });
+  try {
+    const file = await resources.fetchFile('/mugen/hero.sff');
+    assert.equal(new TextDecoder().decode(await file.arrayBuffer()), 'fighter');
+    assert.equal(resources.status().bytes, 0);
+    const reused = resources.fetchFile('/mugen/hero.sff');
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(fetched, 1, 'RAM eviction must not race the pending disk write');
+    const disposal = resources.dispose();
+    await new Promise((resolve) => setImmediate(resolve));
+    assert.equal(storage.caches.size, 1, 'disposal waits for disk writes before deleting the cache');
+    releaseDisk();
+    await reused;
+    assert.equal(fetched, 1);
+    await disposal;
+    assert.equal(storage.caches.size, 0);
+  } finally {
+    releaseDisk();
+    await resources.dispose();
+  }
+});
+
 test('large fighters remain cached across matches after RAM eviction, with private writable files', async () => {
   const storage = temporaryStorage();
   const fetched = [];
