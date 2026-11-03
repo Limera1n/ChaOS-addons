@@ -7,6 +7,7 @@ import { createCatalog } from '../server/catalog.js';
 import { importPack, PACK_LIMITS } from '../server/pack-import.js';
 import { zipFixture, spriteFixture, characterPack } from './zip-fixture.js';
 import { characterFiles } from '../server/portrait.js';
+import { rarFixture } from './rar-fixture.js';
 
 async function fixture(t) {
   const root = await mkdtemp(join(tmpdir(), 'mugen-pack-'));
@@ -28,6 +29,20 @@ test('MUGEN imports a wrapped character ZIP, repairs case/path references and re
     /sprite = "hero.sff"/,
   );
   assert.deepEqual(await readdir(root), ['Characters']);
+});
+
+test('MUGEN refuses unsafe, encrypted, oversized and corrupt RAR archives', async (t) => {
+  const { root, upload } = await fixture(t);
+  for (const files of [
+    [{ name: '../outside.txt', data: 'bad' }],
+    [{ name: 'C:\\outside.txt', data: 'bad' }],
+    [{ name: 'payload.js', data: 'bad' }],
+    [{ name: 'secret.txt', data: 'secret', encrypted: true }],
+    [{ name: 'huge.sff', data: 'small', size: PACK_LIMITS.file + 1 }],
+    [{ name: 'same.txt' }, { name: 'SAME.txt' }],
+  ]) await assert.rejects(upload(rarFixture(files), 'characters', 'hero.rar'));
+  await assert.rejects(upload(Buffer.from('broken'), 'characters', 'hero.rar'));
+  assert.deepEqual(await readdir(root), []);
 });
 
 test('MUGEN imports UTF-8 names and asset paths without corrupting their encoding', async (t) => {

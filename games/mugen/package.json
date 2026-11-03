@@ -1,0 +1,8 @@
+{
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "node-unrar-js": "2.0.2",
+    "yauzl": "3.4.0"
+  }
+}

@@ -311,9 +311,36 @@
   gap: 16px;
 }
 .mugen-library .pack {
+  position: relative;
   min-width: 0;
   border: 1px solid var(--line);
   background: #1c1f19;
+}
+.mugen-library .remove-pack {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 1px solid #393b36;
+  border-radius: 3px;
+  background: #171914;
+  color: #93978b;
+  font: 16px/1 sans-serif;
+  line-height: 1;
+  box-shadow: none;
+  cursor: pointer;
+}
+.mugen-library .remove-pack:hover:not(:disabled) {
+  background: #282b24;
+  color: #e1e3da;
+  border-color: #666b5c;
 }
 .mugen-library .pack-art {
   height: 144px;

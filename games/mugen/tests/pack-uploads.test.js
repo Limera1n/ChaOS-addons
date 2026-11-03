@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test, { after } from 'node:test';
 import { createServer } from 'node:http';
-import { mkdtemp, readdir, rm } from 'node:fs/promises';
+import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createHttpApp } from '../../../server/http/app.js';
@@ -111,4 +111,28 @@ test('MUGEN rejects invalid/duplicate packs without leaving partial public files
   await scene.packs.stop();
   assert.equal((await scene.post('characters', 'late.zip', characterPack())).status, 503);
   assert.deepEqual(scene.packs.status(), { accepting: false, activeRequests: 0 });
+});
+
+test('MUGEN deletion requires a same-origin account and preserves other fighters sharing assets', async (t) => {
+  const scene = await fixture(t);
+  await scene.post('characters', 'hero.zip', characterPack());
+  const remove = (path, headers = { Cookie: scene.cookie }) =>
+    fetch(`${scene.origin}/api/mugen/packs/characters?path=${encodeURIComponent(path)}`, {
+      method: 'DELETE', headers,
+    });
+  assert.equal((await remove('hero/hero.def', {})).status, 401);
+  assert.equal((await remove('hero/hero.def', {
+    Cookie: scene.cookie, Origin: 'https://other.invalid',
+  })).status, 403);
+  assert.equal((await remove('../outside.def')).status, 404);
+  assert.equal(scene.catalog.characters().length, 1);
+  await writeFile(join(scene.dataRoot, 'Characters/hero/other.def'),
+    '[Info]\nname = Other\n[Files]\nsprite = hero.sff\n');
+  const result = await remove('hero/hero.def');
+  assert.equal(result.status, 200);
+  assert.equal((await result.json()).removed.name, 'Hero');
+  assert.deepEqual(scene.catalog.characters(), [{ path: 'hero/other.def', name: 'Other' }]);
+  assert.equal((await fetch(scene.origin + '/mugen/hero/hero.def')).status, 404);
+  assert.equal((await fetch(scene.origin + '/mugen/hero/hero.sff')).status, 200);
+  assert.equal((await remove('hero/hero.def')).status, 404);
 });

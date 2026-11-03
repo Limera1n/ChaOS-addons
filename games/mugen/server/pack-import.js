@@ -1,4 +1,4 @@
-// ZIP packs are staged outside the public catalog, validated, then published
+// Archive packs are staged outside the public catalog, validated, then published
 // in one rename. Existing fighters/stages are never replaced during a duel.
 import { createReadStream, createWriteStream, existsSync, readdirSync, renameSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
@@ -73,7 +73,7 @@ function safePath(name) {
 }
 
 function packName(filename) {
-  if (typeof filename !== 'string' || !/\.zip$/i.test(filename) || /[\\/\x00-\x1f]/.test(filename))
+  if (typeof filename !== 'string' || !/\.(zip|rar)$/i.test(filename) || /[\\/\x00-\x1f]/.test(filename))
     throw fail('zip_required');
   const name = filename
     .slice(0, -4)
@@ -118,6 +118,51 @@ async function extract(zip, entries, root, signal) {
     await pipeline(input, meter, createWriteStream(destination, { flags: 'wx' }), { signal });
     if (bytes !== entry.uncompressedSize || checksum !== entry.crc32) throw fail('invalid_zip');
   }
+}
+
+// Present RAR entries through the same validation/extraction path as ZIPs.
+// Extraction stays in memory: archive paths are never handed to a disk writer.
+async function openRar(buffer) {
+  const { createExtractorFromData } = await import('node-unrar-js');
+  const rar = await createExtractorFromData({ data: Uint8Array.from(buffer).buffer });
+  const listing = rar.getFileList();
+  if (listing.arcHeader.flags.headerEncrypted || listing.arcHeader.flags.volume)
+    throw fail('invalid_zip');
+  const entries = [];
+  for (const header of listing.fileHeaders) {
+    if (entries.length >= PACK_LIMITS.entries) throw fail('pack_too_many_files', 413);
+    const path = header.name.replaceAll('\\', '/');
+    entries.push({
+      fileName: path + (header.flags.directory && !path.endsWith('/') ? '/' : ''),
+      uncompressedSize: header.unpSize,
+      crc32: header.crc >>> 0,
+      isEncrypted: () => header.flags.encrypted,
+      originalName: header.name,
+    });
+  }
+  return {
+    entryCount: entries.length,
+    async *eachEntry() { yield* entries; },
+    async extract(entries, root, signal) {
+      const selected = new Map(entries.map((entry) => [entry.originalName, entry]));
+      const files = rar.extract({ files: [...selected.keys()] }).files;
+      // Fully consume the generator to release the native archive handle.
+      for (const file of files) {
+        signal?.throwIfAborted();
+        const entry = selected.get(file.fileHeader.name);
+        if (!entry || !file.extraction) throw fail('invalid_zip');
+        const bytes = file.extraction;
+        if (bytes.length !== entry.uncompressedSize || bytes.length > PACK_LIMITS.file)
+          throw fail('pack_too_large', 413);
+        if (crc32(bytes) !== entry.crc32) throw fail('invalid_zip');
+        const destination = resolve(root, entry.path);
+        if (!destination.startsWith(root + sep)) throw fail('invalid_pack_path');
+        await mkdir(dirname(destination), { recursive: true });
+        await writeFile(destination, bytes, { flag: 'wx' });
+      }
+    },
+    close() {},
+  };
 }
 
 function findAsset(files, definition, raw) {
@@ -205,7 +250,9 @@ export async function importPack({ catalog, kind, filename, buffer, signal }) {
   await mkdir(dataRoot, { recursive: true });
   let staging, zip;
   try {
-    zip = await yauzl.fromBufferPromise(buffer, { autoClose: false, validateEntrySizes: true });
+    zip = /\.rar$/i.test(filename)
+      ? await openRar(buffer)
+      : await yauzl.fromBufferPromise(buffer, { autoClose: false, validateEntrySizes: true });
     if (zip.entryCount > PACK_LIMITS.entries) throw fail('pack_too_many_files', 413);
     const entries = [],
       paths = new Set();
@@ -220,6 +267,9 @@ export async function importPack({ catalog, kind, filename, buffer, signal }) {
       paths.add(pathKey);
       if (entry.fileName.endsWith('/')) continue;
       if (parts.some((part) => part.startsWith('.') || part === '__MACOSX')) continue;
+      // Older packs ship HTML command manuals. Leave them out of the public
+      // assets rather than rejecting an otherwise playable character.
+      if (/\.html?$/i.test(entry.fileName)) continue;
       if (!ASSET_TYPES.has(extname(entry.fileName).toLowerCase()))
         throw fail('unsupported_pack_file');
       if (entry.isEncrypted()) throw fail('encrypted_zip');
@@ -233,7 +283,9 @@ export async function importPack({ catalog, kind, filename, buffer, signal }) {
     const folder = kind === 'characters' ? 'Characters' : 'Stages';
     const unpacked = resolve(staging, folder, name);
     await mkdir(unpacked, { recursive: true });
-    await extract(zip, stripWrapper(entries), unpacked, signal);
+    const files = stripWrapper(entries);
+    if (zip.extract) await zip.extract(files, unpacked, signal);
+    else await extract(zip, files, unpacked, signal);
     const definitions = await validateDefinitions(staging, kind);
     signal?.throwIfAborted();
     const targetRoot = catalog.roots[kind];
@@ -251,7 +303,7 @@ export async function importPack({ catalog, kind, filename, buffer, signal }) {
     return { kind, name, entries: definitions };
   } catch (error) {
     if (error.status || signal?.aborted) throw error;
-    if (['EACCES', 'EPERM', 'ENOSPC'].includes(error.code))
+    if (['EACCES', 'EPERM', 'ENOSPC', 'ERR_MODULE_NOT_FOUND'].includes(error.code))
       throw fail('pack_storage_unavailable', 503);
     throw fail('invalid_zip');
   } finally {

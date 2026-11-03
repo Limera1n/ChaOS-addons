@@ -14,6 +14,7 @@ From the ChaOS website repository:
 
 ```sh
 node scripts/games/games-install.mjs mugen
+npm --prefix games/mugen ci --omit=dev
 node games/mugen/install.mjs
 ```
 
@@ -34,10 +35,17 @@ stays mounted, so a player who only browses keeps the fighter they had already
 picked, and an import re-renders that view with the new pack.
 `client/library-view.js` holds the shelf shared with `/mugen-library`, which
 still serves it as a standalone page for a direct link. Signed-in users can upload
-character or stage ZIP packs; visitors can browse. The archive must include a
+character or stage ZIP/RAR packs; visitors can browse. The archive must include a
 fighter/stage `.def`, its SFF sprite file and the resources its definition uses.
-RAR and 7z files must first be converted to ZIP. The website installs `yauzl`
-as a production dependency to read ZIP archives.
+RAR 4/5 archives are decoded by `node-unrar-js`, ZIP archives by `yauzl`.
+Install the add-on's dependencies with the `npm ci` command above after an update
+as well. Encrypted and multi-volume archives are refused; convert 7z files first.
+
+Signed-in users can remove a character with the × button and a confirmation.
+Removal affects the shared server library and refreshes the open picker. A folder
+containing only that character is deleted with its assets. In a folder shared by
+several fighters, only that character's definitions (including older same-name
+variants) are deleted so the other fighters retain their resources.
 
 Imports are limited to 128 MiB compressed, 256 MiB unpacked, 128 MiB per file and
 5,000 archive entries, with two simultaneous uploads. Files are checked and staged
@@ -142,7 +150,8 @@ Routes: `/mugen/*` (characters), `/mugen-stages/*` (stages), `/games/mugen/engin
 
 Library: `GET /mugen-library` (the same shelf as a standalone page; the MUGEN
 window mounts it in place), `GET /api/mugen/packs`, and
-`POST /api/mugen/packs/{characters|stages}?name=<archive.zip>`. Uploads require a
+`POST /api/mugen/packs/{characters|stages}?name=<archive.zip|archive.rar>` and
+`DELETE /api/mugen/packs/characters?path=<character.def>`. Changes require a
 current account, the same origin and `Content-Type: application/octet-stream`.
 The upload service stops admission and drains staging work on shutdown.
 

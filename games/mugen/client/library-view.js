@@ -1,4 +1,4 @@
-// The MUGEN library: the packs installed on this server, plus ZIP imports.
+// The MUGEN library: installed packs, ZIP/RAR imports and character removal.
 // The MUGEN window mounts this view in place and the standalone /mugen-library
 // page mounts the same one, so browsing and importing stay identical.
 import { el } from './dom.js';
@@ -14,7 +14,7 @@ const DEFAULT_MAX_UPLOAD = 128 * 1024 * 1024;
  * @param {boolean} [options.compact] tighter layout for the MUGEN window
  * @param {string} [options.backText] set to show a back button above the tabs
  * @param {() => void} [options.onBack]
- * @param {() => void} [options.onCatalogChanged] a pack was imported
+ * @param {() => void} [options.onCatalogChanged] a pack was imported or removed
  */
 export function createLibraryView({
   text,
@@ -23,6 +23,13 @@ export function createLibraryView({
   onBack = null,
   onCatalogChanged = null,
 }) {
+  // Translations live in the website; keep new copy usable with older hosts.
+  const copy = (key, fallback, values) => {
+    const translated = text(key, values);
+    return translated === 'games.mugen.' + key ? fallback : translated;
+  };
+  const archiveCopy = (key, values) =>
+    text(key, values).replace(/\bZIP\b/gi, (word) => word === 'zip' ? 'zip / rar' : 'ZIP / RAR');
   const controller = new AbortController();
   const state = {
     catalog: { characters: [], stages: [], maxUploadBytes: DEFAULT_MAX_UPLOAD },
@@ -63,25 +70,25 @@ export function createLibraryView({
   const input = el('input', {
     class: 'pack-input',
     type: 'file',
-    accept: '.zip,application/zip',
+    accept: '.zip,.rar,application/zip,application/vnd.rar,application/x-rar-compressed',
     hidden: true,
   });
   const uploadButton = el('button', {
     class: 'upload-button',
     type: 'button',
-    text: text('chooseZip'),
+    text: archiveCopy('chooseZip'),
     disabled: true,
   });
   const importTitle = el('h2', { text: text('importCharacter') });
   const uploadLimit = el('p', {
     class: 'limit',
-    text: text('zipLimit', { size: Math.round(DEFAULT_MAX_UPLOAD / 1024 / 1024) }),
+    text: archiveCopy('zipLimit', { size: Math.round(DEFAULT_MAX_UPLOAD / 1024 / 1024) }),
   });
   const accountNote = el('p', { class: 'account-note', text: text('checkingAccount') });
   const drop = el('div', { class: 'import-box' }, [
     el('span', { class: 'import-symbol', 'aria-hidden': 'true', text: '↗' }),
     importTitle,
-    el('p', { text: text('zipHint') }),
+    el('p', { text: archiveCopy('zipHint') }),
     input,
     uploadButton,
     uploadLimit,
@@ -96,6 +103,8 @@ export function createLibraryView({
   function renderAccount() {
     uploadButton.disabled = state.busy || !state.canUpload;
     accountNote.textContent = text(state.canUpload ? 'libraryAccountReady' : 'libraryLogin');
+    for (const button of grid.querySelectorAll('.remove-pack'))
+      button.disabled = state.busy || !state.canUpload;
   }
 
   function render() {
@@ -103,7 +112,7 @@ export function createLibraryView({
     counts.stages.textContent = String(state.catalog.stages.length);
     collectionTitle.textContent = text(state.kind);
     importTitle.textContent = text(state.kind === 'characters' ? 'importCharacter' : 'importStage');
-    uploadLimit.textContent = text('zipLimit', {
+    uploadLimit.textContent = archiveCopy('zipLimit', {
       size: Math.round(state.catalog.maxUploadBytes / 1024 / 1024),
     });
     const query = search.value.trim().toLocaleLowerCase();
@@ -120,6 +129,14 @@ export function createLibraryView({
           el('div', { class: 'pack-info' }, [
             el('h3', { text: entry.name }),
             el('p', { class: 'pack-path', text: entry.path }),
+            state.kind === 'characters' ? el('button', {
+              class: 'remove-pack',
+              type: 'button',
+              text: '×',
+              title: copy('removeCharacter', 'Retirer de la bibliothèque'),
+              'aria-label': copy('removeCharacter', 'Retirer de la bibliothèque') + ' : ' + entry.name,
+              onclick: () => void remove(entry),
+            }) : null,
           ]),
         ]),
       ),
@@ -151,7 +168,7 @@ export function createLibraryView({
   async function upload(file) {
     if (!file || state.busy) return;
     if (!state.canUpload) return announce(text('libraryLogin'), true);
-    if (!/\.zip$/i.test(file.name)) return announce(text('error.zip_required'), true);
+    if (!/\.(zip|rar)$/i.test(file.name)) return announce(archiveCopy('error.zip_required'), true);
     if (file.size > state.catalog.maxUploadBytes)
       return announce(text('error.pack_too_large'), true);
     state.busy = true;
@@ -169,7 +186,7 @@ export function createLibraryView({
       if (!response.ok) {
         if (response.status === 401 || response.status === 403) state.canUpload = false;
         const key = 'error.' + payload.error;
-        const message = text(key);
+        const message = archiveCopy(key);
         announce(message === 'games.mugen.' + key ? text('packUploadFailed') : message, true);
         return;
       }
@@ -181,6 +198,32 @@ export function createLibraryView({
     } finally {
       state.busy = false;
       input.value = '';
+      if (!controller.signal.aborted) renderAccount();
+    }
+  }
+
+  async function remove(entry) {
+    if (state.busy || !state.canUpload) return;
+    if (!window.confirm(copy('confirmRemoveCharacter',
+      `Supprimer « ${entry.name} » de la bibliothèque partagée ?`, { name: entry.name }))) return;
+    state.busy = true;
+    renderAccount();
+    try {
+      const response = await fetch(`${API}/characters?path=${encodeURIComponent(entry.path)}`, {
+        method: 'DELETE', signal: controller.signal,
+      });
+      if (!response.ok) {
+        if (response.status === 401 || response.status === 403) state.canUpload = false;
+        throw new Error('remove_failed');
+      }
+      onCatalogChanged?.();
+      await refresh();
+      announce(copy('characterRemoved', `« ${entry.name} » supprimé de la bibliothèque.`, { name: entry.name }));
+    } catch {
+      if (!controller.signal.aborted)
+        announce(copy('characterRemoveFailed', 'Impossible de supprimer ce personnage.'), true);
+    } finally {
+      state.busy = false;
       if (!controller.signal.aborted) renderAccount();
     }
   }

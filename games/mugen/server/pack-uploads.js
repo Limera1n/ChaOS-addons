@@ -2,6 +2,7 @@ import express from 'express';
 import { requireAccount, requireSameOrigin } from '../../../server/api/auth.js';
 import { createUploadRequestService } from '../../../server/uploads/admission.js';
 import { importPack, PACK_LIMITS } from './pack-import.js';
+import { removeCharacter } from './pack-remove.js';
 
 export function createPackUploads({ catalog }) {
   const uploads = createUploadRequestService({ maxConcurrent: 2 });
@@ -37,6 +38,13 @@ export function createPackUploads({ catalog }) {
           },
         ),
       );
+      api.delete('/characters', requireSameOrigin, requireAccount, (request, response, next) => {
+        try {
+          response.json({ removed: removeCharacter({ catalog, path: request.query.path }) });
+        } catch (error) {
+          next(error);
+        }
+      });
       app.use('/api/mugen/packs', api);
     },
     stop: uploads.stop,
