@@ -75,7 +75,7 @@ export function createPeggleUi({ getContainer, emitScore, emitForfeit }) {
     body.replaceChildren();
     Object.assign(body.style, {
       padding: '0', overflow: 'hidden', display: 'flex',
-      alignItems: 'center', justifyContent: 'center',
+      alignItems: 'flex-start', justifyContent: 'center',
     });
 
     const stage = el('div', { class: 'peggle-stage' });
@@ -89,7 +89,7 @@ export function createPeggleUi({ getContainer, emitScore, emitForfeit }) {
     canvas.setAttribute('role', 'img');
     canvas.setAttribute('aria-label', t('games.peggle.boardLabel'));
     stage.appendChild(canvas);
-    const angle = el('input', { type: 'range', min: '3', max: '177', step: '1', value: '126', 'aria-label': t('games.peggle.angle'), class: 'peggle-angle' });
+    const angle = el('input', { type: 'range', min: '0', max: '180', step: '1', value: '126', 'aria-label': t('games.peggle.angle'), class: 'peggle-angle' });
     const fire = el('button', { type: 'button', class: 'btn', 'data-game-focus': 'peggle:fire' }, t('games.peggle.fire'));
     const status = el('div', { 'data-game-status': '', class: 'peggle-controls-status' });
     const controls = el('div', { class: 'peggle-controls' }, angle, fire, status);
@@ -109,20 +109,22 @@ export function createPeggleUi({ getContainer, emitScore, emitForfeit }) {
     };
     view.on(angle, 'input', () => { engine?.aimAt(Number(angle.value)); if (engine) update(engine); });
     view.on(fire, 'click', () => engine?.shoot());
-    if (emitForfeit) stage.appendChild(createForfeitButton(data.gameId));
+    if (emitForfeit) controls.appendChild(createForfeitButton(data.gameId));
     body.appendChild(stage);
 
     const fitCanvas = () => {
       if (!active()) return;
       const scale = Math.min(
         (body.clientWidth || BOARD_WIDTH) / BOARD_WIDTH,
-        Math.max(1, (body.clientHeight || BOARD_HEIGHT) - 64) / BOARD_HEIGHT,
+        Math.max(1, (body.clientHeight || BOARD_HEIGHT) - (controls.offsetHeight || 32)) / BOARD_HEIGHT,
       );
       canvas.style.width = `${Math.round(scale * BOARD_WIDTH)}px`;
       canvas.style.height = `${Math.round(scale * BOARD_HEIGHT)}px`;
     };
     fitCanvas();
-    view.observe(new ResizeObserver(fitCanvas)).observe(body);
+    const resize = view.observe(new ResizeObserver(fitCanvas));
+    resize.observe(body);
+    resize.observe(controls);
 
     try {
       const created = new Engine(canvas, data.pegs, {

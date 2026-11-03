@@ -236,7 +236,7 @@
     // ── Input ─────────────────────────────────────────────────────────────
     aimAt(degrees) {
       if (this._destroyed || this.state !== 'aim' || !Number.isFinite(degrees)) return false;
-      this.aimAngle = Math.max(0.04, Math.min(Math.PI - 0.04, degrees * Math.PI / 180));
+      this.aimAngle = Math.max(0, Math.min(Math.PI, degrees * Math.PI / 180));
       this.onControlState(this);
       return true;
     }
@@ -265,7 +265,9 @@
       if (this.state !== 'aim') return;
       const dx = mx - LAUNCH_X, dy = my - LAUNCH_Y;
       if (dy < 8 && Math.abs(dx) < 30) return;
-      this.aimAngle = Math.max(0.04, Math.min(Math.PI - 0.04, Math.atan2(dy, dx)));
+      // Above the launcher, keep aiming toward the nearest horizontal limit.
+      // A negative atan2 on the left would otherwise clamp to the right.
+      this.aimAngle = Math.atan2(Math.max(0, dy), dx);
       this.onControlState(this);
     }
 

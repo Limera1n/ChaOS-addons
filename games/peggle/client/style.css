@@ -1,25 +1,57 @@
+.game-table-body:has(.table-peggle) {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0;
+  min-height: 0;
+}
+.game-table-body:has(.table-peggle) > .game-table-play {
+  order: -1;
+  flex: 1 0 120px;
+  min-height: 120px;
+}
+.game-table-body:has(.table-peggle) > p {
+  margin: 0 6px;
+  font-size: 12px;
+}
+.game-table-body:has(.table-peggle) > .game-table-seats {
+  margin: 0 6px;
+}
+.game-table-body:has(.table-peggle) > .games-btn-row {
+  margin: 0 6px 6px;
+}
 .table-peggle {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  padding: 6px;
+  height: 100%;
+  min-height: 0;
+  box-sizing: border-box;
   background: #0b1020;
   color: #e6ecff;
 }
 .table-peggle-status {
   margin: 0;
+  padding-inline: 6px;
   font-weight: bold;
+}
+.table-peggle-slot {
+  flex: 1;
+  min-height: 0;
 }
 .table-peggle-host {
   display: flex;
   justify-content: center;
-  min-height: 200px;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
 }
 .table-peggle-scores {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
   font-size: 12px;
+  padding-inline: 6px;
 }
 .table-peggle-score {
   padding: 3px 7px;

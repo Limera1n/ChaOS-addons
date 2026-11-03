@@ -43,8 +43,8 @@ test('late classic script evaluation can run twice without global lexical redecl
 test('Peggle accessible angle uses the pointer bounds and rejects non-finite or in-flight input', () => {
   const { engine } = engineFixture();
   assert.equal(engine.aimAt(Infinity), false);
-  assert.equal(engine.aimAt(-10), true); assert.equal(engine.aimAngle, 0.04);
-  engine.aimAt(200); assert.equal(engine.aimAngle, Math.PI - 0.04);
+  assert.equal(engine.aimAt(-10), true); assert.equal(engine.aimAngle, 0);
+  engine.aimAt(200); assert.equal(engine.aimAngle, Math.PI);
   engine.aimAt(90); engine.shoot(); const angle = engine.aimAngle;
   assert.equal(engine.aimAt(30), false); assert.equal(engine.aimAngle, angle);
   engine.destroy(); assert.equal(engine.aimAt(45), false);
@@ -53,6 +53,15 @@ test('Peggle keyboard shot consumes one ball and cannot refire during flight or 
   const { engine } = engineFixture(); let updates = 0; engine.onControlState = () => updates++;
   engine.shoot(); engine.shoot(); assert.equal(engine.balls, 9); assert.equal(updates, 1);
   engine.destroy(); engine.state = 'aim'; engine.shoot(); assert.equal(engine.balls, 9);
+});
+
+test('Peggle pointer above the launcher keeps the horizontal limit on its own side', () => {
+  const { engine } = engineFixture();
+  engine._updateAim(0, 0);
+  assert.equal(engine.aimAngle, Math.PI);
+  engine._updateAim(554, 0);
+  assert.equal(engine.aimAngle, 0);
+  engine.destroy();
 });
 
 function uiFixture(t, Engine) {

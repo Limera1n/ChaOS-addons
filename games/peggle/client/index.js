@@ -20,7 +20,7 @@ export function create(context) {
   const status = el('p', { role: 'status', class: 'table-peggle-status' });
   const scores = el('div', { class: 'table-peggle-scores' });
   const slot = el('div', { class: 'table-peggle-slot' });
-  root.append(status, slot, scores);
+  root.append(slot, status, scores);
   context.container.replaceChildren(root);
 
   const mySeat = () =>
@@ -58,6 +58,7 @@ export function create(context) {
       })
       .finally(() => {
         run.isLoading = false;
+        if (scope.active && slot.contains(run.host)) render();
       });
     return run;
   }

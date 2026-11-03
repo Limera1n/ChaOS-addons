@@ -16,17 +16,21 @@
 
 .peggle-stage {
   position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  min-height: 0;
   line-height: 0;
 }
-.peggle-controls { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; line-height: 1.3; max-width: 100%; }
+.peggle-controls { display: flex; flex: 0 0 auto; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px; line-height: 1.3; width: 100%; }
 .peggle-controls-status { font-size: 12px; }
 .peggle-angle { width: 130px; }
 
 .peggle-forfeit-btn {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
+  position: static;
   line-height: 1.2;
   color: #ffe4e4;
   background: rgba(73, 18, 26, 0.88);
