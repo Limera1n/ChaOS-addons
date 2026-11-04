@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Carnet de guerre · WoW Forever PvP</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script type="module" src="/app.js"></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">CHAOS <span>/ APPLICATIONS</span></a
+      ><span class="badge">PROTOTYPE LOCAL · 0.1</span>
+    </header>
+    <main>
+      <section class="intro">
+        <div>
+          <p class="eyebrow">WORLD OF WARCRAFT · FOREVER</p>
+          <h1>Carnet de guerre<span>.</span></h1>
+          <p>Les traces de vos combats, hors des champs de bataille.</p>
+        </div>
+        <button id="open-import">Importer un relevé ↗</button>
+      </section>
+      <p class="notice">
+        Collecte expérimentale. Les VH ne sont pas des coups fatals. Les morts
+        affichées ont une cause inconnue, PvP ou PvE.
+      </p>
+      <p id="status" role="status" aria-live="polite"></p>
+      <div class="workspace">
+        <aside>
+          <div class="section-title">
+            <h2>Le groupe</h2>
+            <span id="roster-count">0</span>
+          </div>
+          <label for="search">Rechercher un personnage ou une guilde</label
+          ><input id="search" type="search" placeholder="Nom, guilde…" />
+          <div id="roster"></div>
+        </aside>
+        <section id="profile" aria-label="Fiche personnage">
+          <div class="empty">
+            <p class="eyebrow">LE PREMIER RELEVÉ</p>
+            <h2>Votre histoire commence en jeu.</h2>
+            <p>
+              Installez ChaOSWorldPvP, puis utilisez
+              <code>/cvp export</code>.<br />Collez l’export ici pour ouvrir
+              votre fiche.
+            </p>
+            <button id="empty-import">Importer mon personnage</button>
+            <p>Aucune donnée de démonstration dans les classements.</p>
+          </div>
+        </section>
+      </div>
+      <section id="activity" hidden>
+        <div class="section-title">
+          <h2>Sur le terrain</h2>
+          <label
+            >Carte observée
+            <select id="map-filter">
+              <option value="all">Toutes les zones</option>
+            </select></label
+          >
+        </div>
+        <div class="terrain">
+          <section>
+            <h3>Positions collectées</h3>
+            <p class="muted">
+              Plan schématique, sans fond de carte du jeu. Position du
+              collecteur, pas nécessairement de sa victime. Sélectionnez une
+              carte pour afficher les points.
+            </p>
+            <svg
+              id="map"
+              viewBox="0 0 100 100"
+              role="img"
+              aria-label="Positions sur la carte sélectionnée"
+            ></svg>
+            <p class="muted">
+              ● VH observées · × morts personnelles. Le survol indique les
+              coordonnées et leur ancienneté.
+            </p>
+          </section>
+          <section>
+            <h3>Répartition par zone</h3>
+            <div id="zones"></div>
+          </section>
+        </div>
+        <h3>Journal du monde ouvert</h3>
+        <p class="muted">
+          Événements observés pendant la collecte uniquement. Les périodes hors
+          ligne ne sont pas reconstituées. Les 200 événements les plus récents
+          sont affichés.
+        </p>
+        <div class="table-scroll">
+          <table>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Événement</th>
+                <th>Zone</th>
+                <th>Position</th>
+              </tr>
+            </thead>
+            <tbody id="events"></tbody>
+          </table>
+        </div>
+      </section>
+      <footer>
+        DONNÉES PERSONNELLES DÉCLARÉES PAR ADDON
+        <span>Stockage sur cet ordinateur · pas encore connecté à ChaOS</span>
+      </footer>
+    </main>
+    <dialog id="import-dialog">
+      <form id="import-form">
+        <div class="section-title">
+          <h2>Importer un relevé</h2>
+          <button type="button" id="close-import" aria-label="Fermer">×</button>
+        </div>
+        <p>
+          Dans WoW : <code>/cvp export</code>, puis Ctrl+A et Ctrl+C. Collez le
+          JSON ci-dessous ou ouvrez un fichier d’export.
+        </p>
+        <label for="import-file">Fichier JSON (2 Mio maximum)</label
+        ><input
+          id="import-file"
+          type="file"
+          accept=".json,application/json"
+        /><label for="payload">Export de l’addon</label
+        ><textarea
+          id="payload"
+          rows="10"
+          required
+          spellcheck="false"
+          placeholder='{"format":"chaos-world-pvp",…}'
+        ></textarea>
+        <p id="import-error" role="alert"></p>
+        <button id="submit-import" type="submit">Enregistrer le relevé</button>
+      </form>
+    </dialog>
+  </body>
+</html>

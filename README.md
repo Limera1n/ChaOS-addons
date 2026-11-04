@@ -41,6 +41,10 @@ games/<id>/
 
 The website owns each game's catalog manifest, thumbnail, window and translations. Add-ons must not include those website files or an installed data directory.
 
+## Application projects
+
+- [WoW Forever PvP](applications/wow-forever-pvp/README.md) : prototype local de suivi du PvP sauvage avec addon WoW, imports, personnages, équipement et positions. [Cadrage et avancement](docs/wow-forever-pvp.md). Validation dans le client Forever et raccordement à ChaOS encore à faire.
+
 ## Development
 
 Check package metadata from this repository:

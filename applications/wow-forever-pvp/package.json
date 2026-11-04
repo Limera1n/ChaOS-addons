@@ -1,0 +1,14 @@
+{
+  "name": "chaos-wow-forever-pvp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "start": "node server/local-server.js",
+    "test": "node --test tests/*.test.js",
+    "package:addon": "powershell -NoProfile -ExecutionPolicy Bypass -File scripts/package-addon.ps1"
+  },
+  "engines": {
+    "node": ">=24"
+  }
+}
