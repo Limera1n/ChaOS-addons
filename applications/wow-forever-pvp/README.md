@@ -1,7 +1,7 @@
 # WoW Forever PvP — prototype 0.4
 
 Application de suivi du PvP sauvage, accompagnée d'un addon WoW expérimental.
-Elle s'installe comme application ChaOS (contrat `chaosAddonApi: 2`) ou tourne
+Elle s'installe comme application ChaOS (contrat `chaosAddonApi: 3`) ou tourne
 seule en local. **Pas encore testée dans le client Forever.** Aucune API web
 Blizzard ni dépendance npm n'est nécessaire.
 
@@ -13,7 +13,7 @@ s'ouvre dans sa propre fenêtre du bureau (`client/index.html`).
 
 - Tout le monde consulte le carnet ; seul un compte ChaOS connecté peut
   importer un relevé, et uniquement depuis le site (`server/index.js`).
-- Les relevés sont stockés dans `games/wow-forever-pvp/data/tracker.json` sur le
+- Les relevés sont stockés dans `addons/applications/wow-forever-pvp/data/tracker.json` sur le
   serveur. Ce dossier est conservé lors des mises à jour et désinstallations, et
   monté comme volume par la composition Docker générée.
 - L'API est servie sous `/api/wow-forever-pvp/` (`state` en lecture, `import`

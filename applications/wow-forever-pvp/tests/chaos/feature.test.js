@@ -6,13 +6,13 @@ import { createServer } from "node:http";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { createHttpApp } from "../../../../server/http/app.js";
+import { createHttpApp } from "../../../../../server/http/app.js";
 import {
   createAccount,
   createSession,
   SESSION_COOKIE,
-} from "../../../../server/auth/service.js";
-import { db } from "../../../../server/db/index.js";
+} from "../../../../../server/auth/service.js";
+import { db } from "../../../../../server/db/index.js";
 import { createWowForeverPvpFeature } from "../../server/index.js";
 import { API_PATH, IMPORT_TYPE } from "../../server/routes.js";
 

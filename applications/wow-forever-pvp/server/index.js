@@ -3,8 +3,8 @@
 // first request, so importing this module starts no work.
 import express from "express";
 import { fileURLToPath } from "node:url";
-import { defineFeature } from "../../../server/core/features.js";
-import { requireAccount, requireSameOrigin } from "../../../server/api/auth.js";
+import { defineFeature } from "../../../../server/core/features.js";
+import { requireAccount, requireSameOrigin } from "../../../../server/api/auth.js";
 import { createTrackerStore } from "./store.js";
 import { MAX_IMPORT_BYTES } from "./import-schema.js";
 import { API_PATH, IMPORT_TYPE, importErrorStatus } from "./routes.js";
