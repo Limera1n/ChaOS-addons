@@ -83,6 +83,35 @@ fire("PLAYER_LOGOUT")
 local count = #profile.events
 hk = 300; fire("PLAYER_LOGIN")
 assert(#profile.events == count + 1, "Offline gains must not produce an event")
+
+local recap, retry
+C_DeathRecap = { GetRecapEvents = function() return recap end }
+C_Timer = { After = function(_, callback) retry = callback end }
+isPlayerDead = true; fire("PLAYER_DEAD")
+local death = profile.events[#profile.events]
+assert(death.cause == "unknown" and retry)
+recap = {
+    { timestamp = clock, overkill = -1, sourceGUID = "Creature-0-1", sourceName = "Other hit" },
+    { timestamp = clock + 0.1, overkill = 0, sourceGUID = "Pet-0-2", sourceFlags = 0x1100, sourceName = "Fatal pet" },
+}
+retry()
+assert(death.cause == "pvp" and death.source == "Fatal pet")
+
+isPlayerDead = false; fire("PLAYER_ALIVE")
+isPlayerDead = true; fire("PLAYER_DEAD")
+death = profile.events[#profile.events]
+assert(death.cause == "unknown", "A previous recap must not be reused")
+recap = { { timestamp = clock + 0.2, overkill = 5, event = "ENVIRONMENTAL_DAMAGE", sourceName = secret } }
+retry()
+assert(death.cause == "environment" and not death.source)
+
+isPlayerDead = false; fire("PLAYER_UNGHOST")
+isPlayerDead = true; fire("PLAYER_DEAD")
+death = profile.events[#profile.events]
+recap = { { timestamp = clock + 0.3, overkill = 0, sourceGUID = "Creature-0-3", sourceName = "Fatal creature" } }
+retry()
+assert(death.cause == "pve" and death.source == "Fatal creature")
+
 playerSex = 3
 SlashCmdList.CHAOSWORLDPVP("export")
 local payload
@@ -93,6 +122,7 @@ assert(type(payload) == "string" and payload:find('"format":"chaos%-world%-pvp"'
 assert(payload:find('"equipment":%['))
 assert(payload:find('"raceId":1') and payload:find('"sex":3'))
 assert(payload:find('"icon":133138') and payload:find('"quality":4'))
+assert(payload:find('"cause":"pve"') and payload:find('"source":"Fatal pet"'))
 assert(payload:find('\\u0022Hat\\u0022'))
 assert(not payload:find('"lifetimeHK":{}'))
 -- Available to the optional Wasmoon runner for validation with the real import schema.

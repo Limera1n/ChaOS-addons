@@ -494,16 +494,38 @@ select {
 }
 .terrain {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
   gap: 32px;
   border-block: 1px solid var(--line);
   padding: 12px 0 24px;
 }
-#map {
-  display: block;
-  width: 100%;
-  max-height: 350px;
-  aspect-ratio: 1;
+.map-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px 8px 14px;
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  background: #22251a;
+  color: var(--ink);
+}
+#map-current {
+  font: 17px Georgia, serif;
+}
+#map-zoom-out {
+  flex: none;
+  padding: 5px 9px;
+  border-color: var(--line);
+  background: #181c14;
+  color: var(--ink);
+}
+#map-zoom-out:disabled {
+  cursor: default;
+}
+.map-frame {
+  position: relative;
+  aspect-ratio: 3 / 2;
   background-color: #1a2117;
   background-image:
     linear-gradient(#34402c66 1px, transparent 1px),
@@ -511,21 +533,81 @@ select {
   background-size: 10% 10%;
   border: 1px solid var(--line);
 }
+#map-art,
+#map {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+#map-art img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+.map-region {
+  fill: transparent;
+  stroke: transparent;
+  vector-effect: non-scaling-stroke;
+  cursor: zoom-in;
+}
+.map-region:hover,
+.map-region:focus-visible {
+  fill: #f0d58c33;
+  stroke: #f0d58c;
+  stroke-width: 1.5px;
+}
+.map-marker-target {
+  fill: transparent;
+}
+.map-marker-link {
+  cursor: zoom-in;
+}
+#map-note:empty {
+  display: none;
+}
+.map-caption {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 0 12px;
+}
+.map-caption a,
+.map-honor-key {
+  color: var(--accent);
+}
+.map-death-key {
+  color: var(--death);
+}
 .map-dot {
   fill: var(--accent);
   stroke: #111;
-  stroke-width: 0.2;
+  stroke-width: 1.5px;
+  vector-effect: non-scaling-stroke;
 }
 .map-death {
-  stroke: var(--death);
-  stroke-width: 0.7;
+  stroke: #ffb098;
+  stroke-linecap: round;
+  stroke-width: 2.5px;
+  vector-effect: non-scaling-stroke;
+  filter: drop-shadow(0 0 1px #16110b) drop-shadow(0 0 1.5px #16110b);
 }
 .zone {
   display: flex;
+  width: 100%;
+  align-items: baseline;
   justify-content: space-between;
   gap: 16px;
-  padding: 15px 0;
+  padding: 15px 8px;
+  border: 0;
   border-bottom: 1px solid var(--line);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+.zone:hover,
+.zone[aria-pressed="true"] {
+  background: #262d20;
 }
 .zone span {
   color: var(--muted);

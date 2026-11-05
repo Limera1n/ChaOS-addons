@@ -10,7 +10,7 @@
   <body>
     <header>
       <span class="brand">CHAOS <span>/ APPLICATIONS</span></span
-      ><span class="badge">PROTOTYPE · 0.4</span>
+      ><span class="badge">PROTOTYPE · 0.5</span>
     </header>
     <main>
       <section class="intro">
@@ -22,8 +22,9 @@
         <button id="open-import">Importer un relevé ↗</button>
       </section>
       <p class="notice">
-        Collecte expérimentale. Les VH ne sont pas des coups fatals. Les morts
-        affichées ont une cause inconnue, PvP ou PvE.
+        Collecte expérimentale. Les VH peuvent inclure les participations en
+        groupe. La cause du décès est affichée quand le récapitulatif du jeu
+        permet d’identifier le coup fatal.
       </p>
       <p id="status" role="status" aria-live="polite"></p>
       <div class="workspace">
@@ -54,9 +55,9 @@
         <div class="section-title">
           <h2>Sur le terrain</h2>
           <label
-            >Carte observée
+            >Carte
             <select id="map-filter">
-              <option value="all">Toutes les zones</option>
+              <option value="947">Azeroth · toutes les zones</option>
             </select></label
           >
         </div>
@@ -64,19 +65,26 @@
           <section>
             <h3>Positions collectées</h3>
             <p class="muted">
-              Plan schématique, sans fond de carte du jeu. Position du
-              collecteur, pas nécessairement de sa victime. Sélectionnez une
-              carte pour afficher les points.
+              Chaque marqueur indique la position du personnage suivi.
             </p>
-            <svg
-              id="map"
-              viewBox="0 0 100 100"
-              role="img"
-              aria-label="Positions sur la carte sélectionnée"
-            ></svg>
-            <p class="muted">
-              ● VH observées · × morts personnelles. Le survol indique les
-              coordonnées et leur ancienneté.
+            <div class="map-toolbar">
+              <span id="map-current" aria-live="polite">Azeroth</span>
+              <button id="map-zoom-out" type="button" disabled>− Dézoomer</button>
+            </div>
+            <div class="map-frame">
+              <div id="map-art" aria-hidden="true"></div>
+              <svg
+                id="map"
+                viewBox="0 0 150 100"
+                preserveAspectRatio="none"
+                role="group"
+                aria-label="Positions sur la carte sélectionnée"
+              ></svg>
+            </div>
+            <p id="map-note" class="muted" role="status"></p>
+            <p class="map-caption muted">
+              <span><b class="map-honor-key">●</b> VH observées · <b class="map-death-key">×</b> morts personnelles</span>
+              <a href="https://warcraftforever.games/maps" target="_blank" rel="noopener noreferrer">© Blizzard · Warcraft Forever</a>
             </p>
           </section>
           <section>

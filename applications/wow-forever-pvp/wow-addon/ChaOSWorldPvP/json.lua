@@ -1,4 +1,4 @@
-ChaOSWorldPvP = { version = "0.3.0" }
+ChaOSWorldPvP = { version = "0.5.0" }
 local ns = ChaOSWorldPvP
 local arrayMeta = {}
 function ns.Array(value) return setmetatable(value or {}, arrayMeta) end

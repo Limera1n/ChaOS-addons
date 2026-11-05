@@ -19,6 +19,7 @@ export function createLocalServer({
       ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
       ["/style.css", ["style.css", "text/css; charset=utf-8"]],
       ["/model.js", ["model.js", "text/javascript; charset=utf-8"]],
+      ["/map-regions.js", ["map-regions.js", "text/javascript; charset=utf-8"]],
       ["/armory.js", ["armory.js", "text/javascript; charset=utf-8"]],
     ].map(([path, [file, type]]) => [
       path,
@@ -33,7 +34,7 @@ export function createLocalServer({
     response.setHeader("X-Content-Type-Options", "nosniff");
     response.setHeader(
       "Content-Security-Policy",
-      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://zephras.com/icons/card/; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
+      "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data: https://zephras.com/icons/card/ https://wowforever-media.fly.storage.tigris.dev/maps/; connect-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'",
     );
     const reply = (status, value) => {
       response.writeHead(status, {

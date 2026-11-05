@@ -10,6 +10,19 @@ import { createLocalServer } from "../server/local-server.js";
 import { API_PATH, IMPORT_TYPE } from "../server/routes.js";
 import { groupZones, honorProgress, itemQuality, summarize } from "../client/model.js";
 import { ARMORY_VIEW_PATH, armoryRace, armoryUrl } from "../client/armory.js";
+import { AZEROTH, mapContains, projectPosition } from "../client/map-regions.js";
+
+test("Tirisfal positions project through the Eastern Kingdoms to Azeroth", () => {
+  const location = { mapId: 1420, x: 0.295, y: 0.652 };
+  assert.deepEqual(projectPosition(location, "1420"), { x: 0.295, y: 0.652 });
+  assert.equal(mapContains("1415", "1420"), true);
+  const world = projectPosition(location, AZEROTH);
+  assert.ok(Math.abs(world.x - 0.691469) < 0.000001);
+  assert.ok(Math.abs(world.y - 0.269225) < 0.000001);
+  assert.equal(mapContains("1414", "1420"), false);
+  assert.equal(projectPosition(location, "1414"), null);
+  assert.equal(projectPosition({ ...location, mapId: 2521 }, AZEROTH), null);
+});
 
 test("armory keeps legacy race names and uses the dressing room slot order", () => {
   assert.equal(armoryRace({ race: "Morte-vivante" }), 5);
@@ -103,17 +116,21 @@ function temporary(t) {
 
 test("imports survive restart, deduplicate and reject changed events atomically", (t) => {
   const dataDir = temporary(t);
+  const observed = batch();
+  observed.events[1].cause = "pve";
+  observed.events[1].source = "Fatal creature";
   let store = createTrackerStore({ dataDir, now: () => 300000 });
-  assert.equal(store.importBatch(batch()).added, 5);
+  assert.equal(store.importBatch(observed).added, 5);
   store.stop();
   assert.throws(() => store.read(), /stopped/);
   store = createTrackerStore({ dataDir });
-  assert.equal(store.importBatch(batch()).added, 0);
-  const upgraded = batch();
+  assert.equal(store.read().characters[0].events[1].source, "Fatal creature");
+  assert.equal(store.importBatch(observed).added, 0);
+  const upgraded = structuredClone(observed);
   upgraded.addonVersion = "0.2.0";
   upgraded.build = "next-build";
   assert.equal(store.importBatch(upgraded).added, 0);
-  const conflicting = batch();
+  const conflicting = structuredClone(observed);
   conflicting.events[0].amount = 99;
   assert.throws(() => store.importBatch(conflicting), /Conflit/);
   assert.equal(store.read().characters[0].events[0].amount, 2);
@@ -121,6 +138,37 @@ test("imports survive restart, deduplicate and reject changed events atomically"
     createTrackerStore({ dataDir }).read().characters[0].events[0].amount,
     2,
   );
+});
+
+test("reimports fill missing equipment metadata without rewriting observations", (t) => {
+  const dataDir = temporary(t);
+  const store = createTrackerStore({ dataDir });
+  const legacy = batch();
+  store.importBatch(legacy);
+  const enriched = batch();
+  const item = enriched.snapshots[1].equipment[0];
+  Object.assign(item, { icon: 133138, quality: 0 });
+
+  enriched.events[0].amount = 99;
+  assert.throws(() => store.importBatch(enriched), /Conflit/);
+  assert.deepEqual(store.read().characters[0].snapshots[1].equipment[0], {
+    ...legacy.snapshots[1].equipment[0],
+    link: null,
+  });
+  enriched.events[0].amount = legacy.events[0].amount;
+
+  assert.equal(store.importBatch(enriched).added, 0);
+  assert.equal(store.importBatch(legacy).added, 0);
+  assert.equal(store.importBatch(enriched).added, 0);
+  assert.deepEqual(createTrackerStore({ dataDir }).read().characters[0].snapshots[1].equipment[0], {
+    ...item,
+    link: null,
+  });
+  item.itemId++;
+  assert.throws(() => store.importBatch(enriched), /Conflit/);
+  item.itemId--;
+  item.icon++;
+  assert.throws(() => store.importBatch(enriched), /Conflit/);
 });
 
 test("late imports preserve metadata and sort observations by collection time", (t) => {
@@ -177,6 +225,13 @@ test("schema rejects malformed coordinates, duplicate identities, future and ove
       value.events[0].context = "untrusted";
     },
     (value) => {
+      value.events[1].cause = "untrusted";
+    },
+    (value) => {
+      value.events[1].cause = "pve";
+      value.events[1].source = "x".repeat(161);
+    },
+    (value) => {
       value.events[0].at = 201;
     },
     (value) => {
@@ -195,9 +250,15 @@ test("schema rejects malformed coordinates, duplicate identities, future and ove
   }
   const input = batch();
   input.events[1].cause = "pvp";
+  input.events[1].source = "Adversaire-Royaume";
+  input.events[0].cause = "pvp";
+  input.events[0].source = "Ignoré";
   input.character.extra = "<script>";
   const clean = validateImport(input);
-  assert.equal(clean.events[1].cause, "unknown");
+  assert.equal(clean.events[0].cause, "unknown");
+  assert.equal(clean.events[0].source, undefined);
+  assert.equal(clean.events[1].cause, "pvp");
+  assert.equal(clean.events[1].source, "Adversaire-Royaume");
   assert.equal(clean.character.extra, undefined);
 });
 

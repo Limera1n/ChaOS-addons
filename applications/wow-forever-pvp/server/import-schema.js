@@ -126,6 +126,9 @@ export function validateImport(input) {
     ]);
     const amount = integer(item.amount, 1000000);
     if (type === "honor-gain" ? amount < 1 : amount !== 0) fail();
+    const cause = type === "death"
+      ? oneOf(item.cause ?? "unknown", ["unknown", "pvp", "pve", "environment", "self"])
+      : "unknown";
     return {
       ...base,
       type,
@@ -137,7 +140,8 @@ export function validateImport(input) {
         "instance",
         "unknown",
       ]),
-      cause: "unknown",
+      cause,
+      ...(cause !== "unknown" && item.source != null ? { source: string(item.source) } : {}),
       location: eventLocation,
     };
   });

@@ -1,14 +1,27 @@
 import { groupZones, honorProgress, itemQuality, summarize } from "./model.js";
 import { mountArmory } from "./armory.js";
+import { AZEROTH, mapContains, mapRegions, projectPosition } from "./map-regions.js";
 
 // Same paths as server/routes.js; the client cannot import server code.
 const API_PATH = "/api/wow-forever-pvp";
 const IMPORT_TYPE = "application/vnd.chaos-world-pvp+json";
+const MAP_ART = "https://wowforever-media.fly.storage.tigris.dev/maps/1.60.1.69893/zones/";
+const deathCauses = new Map([
+  ["pvp", "PvP"],
+  ["pve", "PvE"],
+  ["environment", "environnement"],
+  ["self", "dégâts auto-infligés"],
+]);
 
 const $ = (selector) => document.querySelector(selector);
 const date = (at) =>
   at == null ? "Non relevé" : new Date(at * 1000).toLocaleString("fr-FR");
 const count = (value) => (value == null ? "—" : value.toLocaleString("fr-FR"));
+function eventLabel(item) {
+  if (item.type !== "death") return `+${count(item.amount)} VH`;
+  const cause = deathCauses.get(item.cause) ?? "cause inconnue";
+  return `Mort · ${cause}${item.source ? ` · ${item.source}` : ""}`;
+}
 const escape = (value) =>
   String(value ?? "").replace(
     /[&<>"']/gu,
@@ -58,8 +71,9 @@ function equipmentRow(item) {
 }
 let state = { characters: [] };
 let selectedKey = null;
-let selectedMap = "all";
+let selectedMap = AZEROTH;
 let selectedEvents = [];
+let mapNames = new Map();
 let honorScope = "character";
 
 function renderHonorProgress(character, guild) {
@@ -135,7 +149,7 @@ function renderRoster() {
     button.addEventListener("click", () => {
       if (selectedKey === character.key) return;
       selectedKey = character.key;
-      selectedMap = "all";
+      selectedMap = AZEROTH;
       render();
     });
     $("#roster").append(button);
@@ -149,7 +163,7 @@ function render() {
   const latest = summary.latest;
   $("#profile").innerHTML =
     `<div class="identity"><div><p class="eyebrow">${escape(character.faction ?? "FACTION INCONNUE")} / ${escape(character.realm)}</p><h2>${escape(character.name)}</h2><p>${escape(character.race ?? "Race inconnue")} · ${escape(character.class ?? "Classe inconnue")} · Niveau ${count(character.level)}</p><p>${escape(latest?.guild ?? "Guilde non relevée")} · Règles : ${escape(character.ruleset === "unknown" ? "Non renseignées" : character.ruleset)}</p></div><span class="sigil" aria-hidden="true">⚔</span></div>
-    <div class="metrics"><div class="metric"><strong>${count(summary.lifetimeHK)}</strong><span>VH cumulées · tous contextes</span></div><div class="metric"><strong>${count(summary.worldHK)}</strong><span>VH observées · monde ouvert</span></div><div class="metric"><strong>${count(summary.deaths)}</strong><span>Morts observées · cause inconnue</span></div><div class="metric"><strong>${summary.delta == null ? "—" : "+" + count(summary.delta)}</strong><span>Écart du compteur · tous contextes</span></div></div>
+    <div class="metrics"><div class="metric"><strong>${count(summary.lifetimeHK)}</strong><span>VH cumulées · tous contextes</span></div><div class="metric"><strong>${count(summary.worldHK)}</strong><span>VH observées · monde ouvert</span></div><div class="metric"><strong>${count(summary.deaths)}</strong><span>Morts observées · monde ouvert</span></div><div class="metric"><strong>${summary.delta == null ? "—" : "+" + count(summary.delta)}</strong><span>Écart du compteur · tous contextes</span></div></div>
     <p class="muted">Compteur relevé le ${escape(date(summary.counterAt))}. Dernier import : ${escape(date(character.lastImportedAt))}. Historique limité aux sessions collectées ; relevés auto-déclarés.</p>
     <section class="honor-progress" aria-labelledby="honor-title">
       <div class="honor-heading">
@@ -221,35 +235,43 @@ function render() {
     icon.addEventListener("error", () => icon.remove(), { once: true });
   selectedEvents = summary.events;
   const zones = groupZones(selectedEvents);
-  $("#map-filter").replaceChildren(new Option("Toutes les zones", "all"));
-  for (const zone of zones)
-    $("#map-filter").add(
-      new Option(`${zone.name} · ${zone.key}`, String(zone.key)),
-    );
-  if (
-    ![...$("#map-filter").options].some(
-      (option) => option.value === selectedMap,
-    )
-  )
-    selectedMap = "all";
-  $("#map-filter").value = selectedMap;
+  mapNames = new Map([...mapRegions].map(([id, region]) => [id, region.name]));
+  for (const zone of zones) {
+    const id = String(zone.key);
+    if (zone.name !== "Zone inconnue" || !mapNames.has(id)) mapNames.set(id, zone.name);
+  }
+  const picker = $("#map-filter");
+  picker.replaceChildren(new Option("Azeroth · toutes les zones", AZEROTH));
+  const regions = [...mapNames]
+    .filter(([id]) => id !== AZEROTH)
+    .sort((a, b) => a[1].localeCompare(b[1], "fr"));
+  for (const [id, name] of regions) picker.add(new Option(name, id));
+  if (!mapNames.has(selectedMap)) selectedMap = AZEROTH;
   $("#zones").innerHTML = zones.length
     ? zones
         .map(
           (zone) =>
-            `<div class="zone"><strong>${escape(zone.name)}</strong><span>${count(zone.hk)} VH · ${count(zone.deaths)} mort${zone.deaths === 1 ? "" : "s"}</span></div>`,
+            `<button type="button" class="zone" data-map="${escape(zone.key)}"><strong>${escape(zone.name)}</strong><span>${count(zone.hk)} VH · ${count(zone.deaths)} mort${zone.deaths === 1 ? "" : "s"}</span></button>`,
         )
         .join("")
     : '<p class="muted">Aucun événement en monde ouvert collecté.</p>';
   $("#activity").hidden = false;
-  renderEvents();
+  selectMap(selectedMap);
 }
-function renderEvents() {
+function selectMap(mapId) {
+  selectedMap = mapId;
+  $("#map-filter").value = mapId;
+  for (const button of $("#zones").querySelectorAll("[data-map]"))
+    button.setAttribute("aria-pressed", String(button.dataset.map === mapId));
   const events = selectedEvents.filter(
     (item) =>
-      selectedMap === "all" ||
-      String(item.location?.mapId ?? "unknown") === selectedMap,
+      mapId === AZEROTH ||
+      mapContains(mapId, String(item.location?.mapId ?? "unknown")),
   );
+  renderEvents(events);
+  renderMap(events);
+}
+function renderEvents(events) {
   $("#events").innerHTML =
     events
       .slice(-200)
@@ -260,35 +282,97 @@ function renderEvents() {
           location?.x == null
             ? "Indisponible"
             : `${(location.x * 100).toFixed(1)}, ${(location.y * 100).toFixed(1)} · ${item.at - location.at}s avant`;
-        return `<tr><td>${escape(date(item.at))}</td><td>${item.type === "death" ? "Mort · cause inconnue" : `+${count(item.amount)} VH`}</td><td>${escape(location?.zone ?? "Zone inconnue")}</td><td>${escape(position)}</td></tr>`;
+        return `<tr><td>${escape(date(item.at))}</td><td>${escape(eventLabel(item))}</td><td>${escape(location?.zone ?? "Zone inconnue")}</td><td>${escape(position)}</td></tr>`;
       })
       .join("") ||
     '<tr><td colspan="4">Aucun événement pour cette sélection.</td></tr>';
+}
+function svgElement(tag, attributes) {
+  const element = document.createElementNS("http://www.w3.org/2000/svg", tag);
+  for (const [name, value] of Object.entries(attributes)) element.setAttribute(name, value);
+  return element;
+}
+function zoomTo(mapId) {
+  selectMap(mapId);
+  $(mapId === AZEROTH ? "#map-filter" : "#map-zoom-out").focus({ preventScroll: true });
+}
+function renderMap(events) {
   const map = $("#map");
   map.replaceChildren();
-  if (selectedMap === "all" || selectedMap === "unknown") return;
-  for (const item of events.filter((event) => event.location?.x != null)) {
-    const { x, y, at } = item.location;
-    const element = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      item.type === "death" ? "path" : "circle",
-    );
-    if (item.type === "death") {
-      element.setAttribute("d", `M${x * 100 - 1},${y * 100 - 1}l2,2m0,-2l-2,2`);
-      element.setAttribute("class", "map-death");
-    } else {
-      element.setAttribute("cx", x * 100);
-      element.setAttribute("cy", y * 100);
-      element.setAttribute("r", "1");
-      element.setAttribute("class", "map-dot");
+  const note = $("#map-note");
+  const art = $("#map-art");
+  const mapId = selectedMap;
+  const name = mapNames.get(mapId);
+  $("#map-current").textContent = name;
+  $("#map-zoom-out").disabled = mapId === AZEROTH;
+  map.setAttribute("aria-label", `Carte de ${name}`);
+  if (!/^\d+$/u.test(mapId)) {
+    art.replaceChildren();
+    note.textContent = "Aucune carte relevée pour cette sélection.";
+    return;
+  }
+  const children = [...mapRegions]
+    .filter(([, region]) => region.parent === mapId && region.bounds)
+    .map(([id, region]) => {
+      const [left, top, right, bottom] = region.hit ?? region.bounds;
+      return { id, left, top, width: right - left, height: bottom - top };
+    })
+    .sort((a, b) => b.width * b.height - a.width * a.height);
+  const positioned = events.filter((event) => event.location?.x != null);
+  const points = positioned.flatMap((item) => {
+    const position = projectPosition(item.location, mapId);
+    return position ? [{ item, ...position }] : [];
+  });
+  const description = [
+    children.length ? "Cliquez sur une région ou sur un marqueur pour zoomer." : "",
+    positioned.length > points.length ? "Certaines positions sont visibles uniquement sur leur carte de zone." : "",
+    !positioned.length ? "Aucune coordonnée relevée sur cette carte." : "",
+  ].filter(Boolean).join(" ");
+  note.textContent = description;
+  const image = document.createElement("img");
+  image.alt = "";
+  image.referrerPolicy = "no-referrer";
+  image.addEventListener("error", () => {
+    if (art.firstElementChild !== image) return;
+    image.remove();
+    note.textContent = `Fond de carte indisponible. ${description}`.trim();
+  }, { once: true });
+  art.replaceChildren(image);
+  image.src = `${MAP_ART}${mapId}.webp`;
+
+  for (const { id, left, top, width, height } of children) {
+    const regionName = mapNames.get(id);
+    const rect = svgElement("rect", {
+      class: "map-region", x: left * 150, y: top * 100, width: width * 150, height: height * 100,
+      tabindex: "0", role: "button", "aria-label": `Zoomer sur ${regionName}`,
+    });
+    const title = svgElement("title", {});
+    title.textContent = regionName;
+    rect.append(title);
+    rect.addEventListener("click", () => zoomTo(id));
+    rect.addEventListener("keydown", (event) => {
+      if (event.key !== "Enter" && event.key !== " ") return;
+      event.preventDefault();
+      zoomTo(id);
+    });
+    map.append(rect);
+  }
+  for (const { item, x, y } of points) {
+    const sourceMap = String(item.location.mapId);
+    const marker = svgElement("g", { transform: `translate(${x * 150} ${y * 100})` });
+    marker.append(svgElement("circle", { class: "map-marker-target", r: 2 }));
+    marker.append(item.type === "death"
+      ? svgElement("path", { class: "map-death", d: "M-1.25,-1.25l2.5,2.5m0,-2.5l-2.5,2.5" })
+      : svgElement("circle", { class: "map-dot", r: 0.9 }));
+    const title = svgElement("title", {});
+    const { x: localX, y: localY, at } = item.location;
+    title.textContent = `${eventLabel(item)} · ${mapNames.get(sourceMap)} · ${date(item.at)} · ${(localX * 100).toFixed(1)}, ${(localY * 100).toFixed(1)} · position ${item.at - at}s avant l’événement`;
+    marker.append(title);
+    if (sourceMap !== mapId) {
+      marker.classList.add("map-marker-link");
+      marker.addEventListener("click", () => zoomTo(sourceMap));
     }
-    const title = document.createElementNS(
-      "http://www.w3.org/2000/svg",
-      "title",
-    );
-    title.textContent = `${item.type === "death" ? "Mort · cause inconnue" : `+${item.amount} VH`} · ${date(item.at)} · ${(x * 100).toFixed(1)}, ${(y * 100).toFixed(1)} · position ${item.at - at}s avant l’événement`;
-    element.append(title);
-    map.append(element);
+    map.append(marker);
   }
 }
 const openImport = () => {
@@ -300,8 +384,14 @@ $("#empty-import").addEventListener("click", openImport);
 $("#close-import").addEventListener("click", () => $("#import-dialog").close());
 $("#search").addEventListener("input", renderRoster);
 $("#map-filter").addEventListener("change", () => {
-  selectedMap = $("#map-filter").value;
-  renderEvents();
+  selectMap($("#map-filter").value);
+});
+$("#map-zoom-out").addEventListener("click", () => {
+  zoomTo(mapRegions.get(selectedMap)?.parent ?? AZEROTH);
+});
+$("#zones").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-map]");
+  if (button) selectMap(button.dataset.map);
 });
 $("#import-file").addEventListener("change", async () => {
   try {

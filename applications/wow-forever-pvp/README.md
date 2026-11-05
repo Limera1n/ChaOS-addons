@@ -1,4 +1,4 @@
-# WoW Forever PvP — prototype 0.4
+# WoW Forever PvP — prototype 0.5
 
 Application de suivi du PvP sauvage, accompagnée d'un addon WoW expérimental.
 Elle s'installe comme application ChaOS (contrat `chaosAddonApi: 3`) ou tourne
@@ -55,7 +55,7 @@ usage partagé, passer par ChaOS et ses comptes.
    `Interface/AddOns/ChaOSWorldPvP/ChaOSWorldPvP.toc`, sans dossier intermédiaire.
 2. Redémarrer le jeu et vérifier que l'addon est activé.
 3. Taper `/cvp status` pour voir les compteurs collectés et la disponibilité des
-   lectures de VH et de carte.
+   lectures de VH, de carte et de l’API de récapitulatif de mort.
 4. Jouer, puis taper `/cvp export`. Copier le contenu de la fenêtre (Ctrl+A,
    Ctrl+C) et le coller dans « Importer un relevé » dans l'application.
 5. Importer à nouveau après une session : les mêmes événements ne sont pas
@@ -68,7 +68,7 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.4.0.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.0.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
@@ -107,13 +107,15 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
   par emplacement et VH cumulées si lisibles.
 - Échantillonnage du compteur toutes les deux secondes : gains de VH par contexte,
   sessions et détection d'une baisse du compteur. Pas d'identification de victime.
-- Morts personnelles, toutes causes confondues, avec position si disponible.
+- Morts personnelles avec position si disponible. Le récapitulatif de WoW
+  Forever peut fournir le coup fatal et sa source. Le journal distingue les
+  morts PvP, PvE, environnementales et auto-infligées.
 - Position précédente de moins de dix secondes utilisée à défaut, avec son heure.
 - Classement du groupe par VH observées dans le monde ouvert, recherche par nom
   ou guilde, fiches, journal et répartition par carte/zone.
-- Plan de coordonnées normalisées d'une carte sélectionnée ; aucun fond de carte
-  du jeu pour le moment. Un point VH est la position du collecteur lors de la
-  détection, pas celle de sa victime.
+- Fond de carte de WoW Forever servi par [Warcraft Forever](https://warcraftforever.games/maps),
+  avec vue d’Azeroth et marqueurs superposés par carte observée. Les marqueurs
+  indiquent la position du collecteur lors de la détection.
 - Import borné à 2 Mio, format validé, doublons ignorés, conflits rejetés,
   sauvegarde par remplacement de fichier et tests de persistance et de transport.
 
@@ -121,7 +123,10 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
 
 - L'addon doit d'abord être validé **en jeu**. Les tests Lua simulés ne prouvent
   pas le comportement de Forever, de ses restrictions ou de son interface.
-- Pas de distinction fiable PvP/PvE pour les morts. Aucun ratio PvP calculé.
+- Les morts importées avant la 0.5 et celles dont le coup fatal est illisible
+  restent de cause inconnue. La catégorie décrit la source du coup fatal.
+- Les fonds proviennent du build 1.60.1.69893. Une grille prend le relais si
+  le fond de la carte sélectionnée ne se charge pas.
 - Les VH incluent les participations en groupe : aucun compteur de coups fatals.
 - Le compteur global et son écart incluent tous les contextes. Seuls les gains
   détectés en contexte explicitement `world` alimentent le suivi sauvage.
@@ -143,7 +148,7 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
 - Le portrait 3D affiche les pièces connues du vestiaire avec leurs textures de
   base. La personnalisation du personnage et ses transmogrifications restent
   à relever.
-- Honneur, rang, points de rang, talents, adversaires et carte du jeu restent à
+- Honneur, rang, points de rang, talents et adversaires des VH restent à
   implémenter après vérification des API et sources de ressources.
 
 ## Vérifier
@@ -170,6 +175,6 @@ listés dans le [cadrage](../../docs/wow-forever-pvp.md).
 
 ## Étape suivante
 
-Installer l'addon sur le client Forever et recueillir un export réel ainsi que
-le résultat de `/cvp status`. Corriger les incompatibilités observées avant
-d'ajouter l'attribution PvP ou les fonds de carte.
+Mettre à jour l’application ChaOS, puis installer le collecteur 0.5 sur le
+client Forever. Vérifier `/cvp status`, importer un relevé avec une nouvelle
+mort et comparer le journal au récapitulatif affiché en jeu.

@@ -1,7 +1,21 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { randomUUID } from "node:crypto";
+import { isDeepStrictEqual } from "node:util";
 import { characterKey, validateImport } from "./import-schema.js";
+
+function fillEquipmentMetadata(equipment, otherEquipment) {
+  return equipment.map((item, index) => {
+    const other = otherEquipment[index];
+    const icon = item.icon ?? other?.icon;
+    const quality = item.quality ?? other?.quality;
+    return {
+      ...item,
+      ...(icon == null ? {} : { icon }),
+      ...(quality == null ? {} : { quality }),
+    };
+  });
+}
 
 export function createTrackerStore({ dataDir, now = Date.now }) {
   const file = join(dataDir, "tracker.json");
@@ -60,14 +74,22 @@ export function createTrackerStore({ dataDir, now = Date.now }) {
             build: batch.build,
             addonVersion: batch.addonVersion,
           };
-          if (
-            JSON.stringify(previousAtCurrentVersion) !==
-            JSON.stringify(candidate)
-          )
-            throw new Error(
-              "Conflit : un événement déjà importé a été modifié.",
-            );
-          continue;
+          if (JSON.stringify(previousAtCurrentVersion) === JSON.stringify(candidate)) continue;
+          if (kind === "snapshots") {
+            // Older importers discarded these optional fields from otherwise identical observations.
+            const equipment = fillEquipmentMetadata(previous.equipment, candidate.equipment);
+            const incomingEquipment = fillEquipmentMetadata(candidate.equipment, previous.equipment);
+            if (isDeepStrictEqual(
+              { ...previousAtCurrentVersion, equipment },
+              { ...candidate, equipment: incomingEquipment },
+            )) {
+              previous.equipment = equipment;
+              continue;
+            }
+          }
+          throw new Error(
+            "Conflit : un événement déjà importé a été modifié.",
+          );
         }
         character[kind].push(candidate);
         ids.set(sourceKey, candidate);
