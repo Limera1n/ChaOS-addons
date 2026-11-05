@@ -1,4 +1,4 @@
-# WoW Forever PvP — prototype 0.2
+# WoW Forever PvP — prototype 0.4
 
 Application de suivi du PvP sauvage, accompagnée d'un addon WoW expérimental.
 Elle s'installe comme application ChaOS (contrat `chaosAddonApi: 2`) ou tourne
@@ -18,6 +18,18 @@ s'ouvre dans sa propre fenêtre du bureau (`client/index.html`).
   monté comme volume par la composition Docker générée.
 - L'API est servie sous `/api/wow-forever-pvp/` (`state` en lecture, `import`
   en écriture, 2 Mio maximum).
+
+### Portrait 3D
+
+Dans la fiche joueur, « Afficher en 3D » ouvre le vestiaire avec la race,
+la silhouette et les identifiants des pièces du dernier relevé. L’addon
+sert sa propre page d’intégration. La visionneuse demande un navigateur
+compatible WebGL 2 et un accès au vestiaire externe.
+
+L’addon WoW relève la race, la silhouette, les identifiants des icônes et la
+qualité des pièces lors de l’export. Pour un ancien relevé, la fiche propose
+les sélecteurs de modèle et déduit la qualité du lien d’objet quand il la
+contient. Les images des icônes sont servies par [Zephras](https://zephras.com/data/).
 
 ## Démarrer seule en local
 
@@ -56,7 +68,7 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.1.0.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.4.0.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
@@ -128,7 +140,9 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
 - Limite serveur de 100 000 événements/relevés. La sauvegarde du prototype est
   prévue pour un seul processus ; ne pas lancer plusieurs instances sur le même
   fichier. Pas de fusion automatique de plusieurs installations d'un personnage.
-- Stuff présenté par nom/identifiant, sans icônes, infobulles complètes ni 3D.
+- Le portrait 3D affiche les pièces connues du vestiaire avec leurs textures de
+  base. La personnalisation du personnage et ses transmogrifications restent
+  à relever.
 - Honneur, rang, points de rang, talents, adversaires et carte du jeu restent à
   implémenter après vérification des API et sources de ressources.
 

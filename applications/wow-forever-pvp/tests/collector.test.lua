@@ -1,6 +1,7 @@
 -- Only a client test can establish that these APIs behave this way on Forever.
 local clock, hk, instance, hasPosition = 1000, 100, "none", true
 local isPlayerDead = false
+local playerSex = 2
 local frames = {}
 local function widget()
     local value = { scripts = {} }
@@ -22,7 +23,8 @@ function GetUnitName() return "Test Player" end
 function GetRealmName() return "Test Realm" end
 function GetCurrentRegion() return 3 end
 function UnitClass() return "Warrior" end
-function UnitRace() return "Human" end
+function UnitRace() return "Human", "Human", 1 end
+function UnitSex() return playerSex end
 function UnitFactionGroup() return "Alliance" end
 function UnitLevel() return 60 end
 function UnitIsDeadOrGhost() return isPlayerDead end
@@ -31,6 +33,8 @@ function GetGuildInfo() return "Test Guild" end
 function GetRealZoneText() return "Test Zone" end
 function GetInventoryItemID(_, slot) if slot == 1 then return 123 end end
 function GetInventoryItemLink() return '|Hitem:123|h[Test "Hat"]|h' end
+function GetInventoryItemTexture() return 133138 end
+C_Item = { GetItemQualityByID = function() return 4 end }
 function GetBuildInfo() return "1.60.1", "test-build" end
 function IsInInstance() return instance ~= "none", instance end
 local secret = {}
@@ -79,6 +83,7 @@ fire("PLAYER_LOGOUT")
 local count = #profile.events
 hk = 300; fire("PLAYER_LOGIN")
 assert(#profile.events == count + 1, "Offline gains must not produce an event")
+playerSex = 3
 SlashCmdList.CHAOSWORLDPVP("export")
 local payload
 for _, value in ipairs(frames) do
@@ -86,6 +91,8 @@ for _, value in ipairs(frames) do
 end
 assert(type(payload) == "string" and payload:find('"format":"chaos%-world%-pvp"'))
 assert(payload:find('"equipment":%['))
+assert(payload:find('"raceId":1') and payload:find('"sex":3'))
+assert(payload:find('"icon":133138') and payload:find('"quality":4'))
 assert(payload:find('\\u0022Hat\\u0022'))
 assert(not payload:find('"lifetimeHK":{}'))
 -- Available to the optional Wasmoon runner for validation with the real import schema.

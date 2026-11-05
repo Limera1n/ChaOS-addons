@@ -66,13 +66,28 @@ local function equipment()
     for slot = 1, 19 do
         local itemId = number(read(GetInventoryItemID, "player", slot))
         if itemId then
-            items[#items + 1] = { slot = slot, itemId = itemId, link = text(read(GetInventoryItemLink, "player", slot)) }
+            local icon = number(read(GetInventoryItemTexture, "player", slot))
+            local quality = number(read(C_Item and C_Item.GetItemQualityByID, itemId))
+            items[#items + 1] = {
+                slot = slot, itemId = itemId, link = text(read(GetInventoryItemLink, "player", slot)),
+                icon = icon and icon > 0 and icon or nil,
+                quality = quality and quality <= 8 and quality or nil,
+            }
         end
     end
     return items
 end
 local function snapshot()
-    profile.character.level = number(read(UnitLevel, "player"))
+    local character = profile.character
+    character.level = number(read(UnitLevel, "player"))
+    character.race = text(read(UnitRace, "player")) or character.race
+    local raceId = number(read(function()
+        local _, _, id = UnitRace("player")
+        return id
+    end))
+    if raceId and raceId > 0 then character.raceId = raceId end
+    local sex = number(read(UnitSex, "player"))
+    if sex == 2 or sex == 3 then character.sex = sex end
     append("snapshots", {
         id = nextId(), at = now(), lifetimeHK = number(read(GetPVPLifetimeStats)),
         guild = text(read(GetGuildInfo, "player")), equipment = equipment(),
@@ -117,8 +132,7 @@ local function initialize()
     db.profiles[key] = db.profiles[key] or { snapshots = {}, events = {}, ruleset = "unknown" }
     profile = db.profiles[key]
     profile.character = { name = name, realm = realm, region = region, ruleset = profile.ruleset,
-        class = text(read(UnitClass, "player")), race = text(read(UnitRace, "player")),
-        faction = text(read(UnitFactionGroup, "player")), level = number(read(UnitLevel, "player")) }
+        class = text(read(UnitClass, "player")), faction = text(read(UnitFactionGroup, "player")) }
     -- Session boundaries never infer gains from the offline interval.
     baseline, lastLocation = nil, nil
     isDead = read(UnitIsDeadOrGhost, "player") == true

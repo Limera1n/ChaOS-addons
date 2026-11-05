@@ -241,21 +241,253 @@ select {
   font-size: 13px;
   color: var(--muted);
 }
-.equipment {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 8px;
-}
-.item {
-  padding: 10px;
+.honor-progress {
+  --trace: #c5df87;
+  padding: 14px 16px 12px;
+  margin: 16px 0 20px;
   border: 1px solid var(--line);
+  background: radial-gradient(ellipse at 85% 0%, #282f20, #171c15 65%);
+}
+.honor-progress[data-scope="guild"] {
+  --trace: #e9be7b;
+}
+.honor-heading,
+.honor-reading,
+.honor-dates {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+.honor-heading {
+  flex-wrap: wrap;
+}
+.honor-heading .eyebrow {
+  margin: 0 0 4px;
+  color: var(--trace);
+}
+.honor-heading h3 {
+  margin: 0;
+  font: 22px Georgia, serif;
+}
+.honor-switch {
+  display: flex;
+  gap: 3px;
+}
+.honor-switch button {
+  padding: 6px 10px;
+  color: var(--muted);
+  background: #171c15;
+  border-color: var(--line);
+}
+.honor-switch button[aria-pressed="true"] {
+  color: #1a2113;
+  background: var(--trace);
+  border-color: var(--trace);
+}
+.honor-switch button:disabled {
+  cursor: default;
+}
+.honor-reading {
+  margin-top: 10px;
+  color: var(--muted);
   font-size: 13px;
   overflow-wrap: anywhere;
 }
-.item small {
+.honor-total {
+  color: var(--trace);
+  font: 26px Georgia, serif;
+  white-space: nowrap;
+}
+.honor-chart {
   display: block;
+  width: 100%;
+  height: clamp(92px, 14vw, 120px);
+  color: var(--trace);
+}
+.honor-grid {
+  stroke: var(--line);
+  stroke-dasharray: 2 5;
+  vector-effect: non-scaling-stroke;
+}
+.honor-line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+}
+.honor-dates {
   color: var(--muted);
-  margin-bottom: 5px;
+  font-size: 11px;
+}
+.honor-dates span:last-child {
+  text-align: right;
+}
+.honor-note {
+  margin: 8px 0 0;
+}
+.arsenal {
+  min-width: 0;
+  padding: 14px;
+  border: 1px solid var(--line);
+  background: #181c15;
+}
+.arsenal-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.arsenal-heading .eyebrow {
+  margin: 0 0 4px;
+  color: var(--accent);
+}
+.arsenal-heading h3 {
+  margin: 0;
+  font: 24px Georgia, serif;
+}
+.arsenal-heading .badge {
+  white-space: nowrap;
+}
+.arsenal-date {
+  margin: 8px 0 12px;
+}
+.equipment {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr));
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+.item {
+  --quality: var(--ink);
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+  padding: 8px;
+  border: 1px solid var(--line);
+  border-inline-start: 2px solid color-mix(in srgb, var(--quality) 65%, var(--line));
+  background: linear-gradient(100deg, color-mix(in srgb, var(--quality) 10%, #141713), #141713 70%);
+}
+.item[data-quality="0"] { --quality: #b0b0a7; }
+.item[data-quality="1"] { --quality: #f3efe5; }
+.item[data-quality="2"] { --quality: #72dc68; }
+.item[data-quality="3"] { --quality: #71b8fa; }
+.item[data-quality="4"] { --quality: #cc8bff; }
+.item[data-quality="5"] { --quality: #ffac55; }
+.item[data-quality="6"] { --quality: #e6cc80; }
+.item[data-quality="7"], .item[data-quality="8"] { --quality: #77e6ee; }
+.item-icon {
+  position: relative;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border: 1px solid color-mix(in srgb, var(--quality) 65%, var(--line));
+  background: #22271e;
+  color: var(--muted);
+  overflow: hidden;
+}
+.item-icon img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.item-info {
+  display: grid;
+  gap: 2px;
+}
+.item-info strong {
+  color: var(--quality);
+  font-size: 14px;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+.item-slot, .item-quality {
+  color: var(--muted);
+  font-size: 11px;
+}
+.item-slot {
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+.armory-layout {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 290px), 1fr));
+  gap: 20px;
+}
+.armory {
+  min-width: 0;
+  background: #181c15;
+  border: 1px solid var(--line);
+  padding: 14px;
+}
+.armory-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.armory-heading h3 {
+  font: 20px Georgia, serif;
+  margin: 0;
+}
+.armory-heading .badge {
+  color: var(--accent);
+  white-space: nowrap;
+}
+.armory-stage {
+  display: grid;
+  place-items: center;
+  height: clamp(300px, 48vh, 500px);
+  border: 1px solid var(--line);
+  background: radial-gradient(ellipse at 50% 65%, #303923, #10140e 72%);
+}
+.armory-placeholder {
+  text-align: center;
+  padding: 12px;
+  color: var(--muted);
+}
+.armory-placeholder span {
+  color: var(--accent);
+  font: 64px Georgia, serif;
+}
+.armory-stage iframe {
+  display: block;
+  border: 0;
+  width: 100%;
+  height: 100%;
+}
+.armory-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 8px;
+  margin-top: 12px;
+}
+.armory-appearance {
+  margin: 12px 0 0;
+  color: var(--accent);
+  font-size: 13px;
+}
+.armory-controls label {
+  margin: 0;
+}
+.armory-controls select {
+  display: block;
+  margin-top: 4px;
+  max-width: 100%;
+}
+.armory-link {
+  color: var(--accent);
+  font-size: 13px;
 }
 #activity {
   margin-top: 35px;
@@ -377,9 +609,6 @@ code {
   }
   .terrain {
     grid-template-columns: 1fr;
-  }
-  .equipment {
-    grid-template-columns: repeat(2, 1fr);
   }
   .metrics {
     grid-template-columns: repeat(2, 1fr);

@@ -8,6 +8,8 @@ import { requireAccount, requireSameOrigin } from "../../../server/api/auth.js";
 import { createTrackerStore } from "./store.js";
 import { MAX_IMPORT_BYTES } from "./import-schema.js";
 import { API_PATH, IMPORT_TYPE, importErrorStatus } from "./routes.js";
+import { ARMORY_VIEW_PATH } from "../client/armory.js";
+import { serveArmory } from "./armory.js";
 
 const passThrough = (_request, _response, next) => next();
 
@@ -19,6 +21,7 @@ export function createWowForeverPvpFeature({
   return defineFeature({
     id: "wowForeverPvp",
     routes(app, { apiLimiter = passThrough } = {}) {
+      app.get(ARMORY_VIEW_PATH, apiLimiter, serveArmory);
       app.get(API_PATH + "/state", apiLimiter, (_request, response) => {
         response.json(openStore().read());
       });

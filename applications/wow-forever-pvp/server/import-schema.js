@@ -12,6 +12,7 @@ function string(value, max = 160) {
     typeof value !== "string" ||
     !value.length ||
     value.length > max ||
+    // eslint-disable-next-line no-control-regex -- exported names must reject control bytes
     /[\u0000-\u001f]/u.test(value)
   )
     fail();
@@ -74,6 +75,8 @@ export function validateImport(input) {
       ruleset: string(character.ruleset, 32),
       class: optionalString(character.class),
       race: optionalString(character.race),
+      ...(character.raceId == null ? {} : { raceId: integer(character.raceId, 10000) }),
+      ...(character.sex == null ? {} : { sex: oneOf(character.sex, [2, 3]) }),
       faction: optionalString(character.faction),
       level: character.level == null ? null : integer(character.level, 1000),
     },
@@ -101,6 +104,8 @@ export function validateImport(input) {
         slot: slotId,
         itemId: integer(slot.itemId, 1000000000),
         link: optionalString(slot.link, 2048),
+        ...(slot.icon == null ? {} : { icon: integer(slot.icon, 1000000000) }),
+        ...(slot.quality == null ? {} : { quality: integer(slot.quality, 8) }),
       };
     }),
   }));

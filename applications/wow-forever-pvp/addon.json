@@ -1,7 +1,7 @@
 {
   "id": "wow-forever-pvp",
   "name": "WoW Forever PvP",
-  "version": "0.2.0",
+  "version": "0.4.0",
   "chaosAddonApi": 2,
   "description": "Carnet de guerre du PvP sauvage sur WoW Forever : relevés de l’addon ChaOSWorldPvP, classement du groupe, journal et positions.",
   "icon": "⚔️",
@@ -21,5 +21,10 @@
     "top": 6,
     "width": 70,
     "height": 80
+  },
+  "development": {
+    "lint": {
+      "innerHtml": ["games/wow-forever-pvp/client/**"]
+    }
   }
 }

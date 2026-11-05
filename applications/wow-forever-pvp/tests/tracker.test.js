@@ -8,7 +8,54 @@ import { createTrackerStore } from "../server/store.js";
 import { validateImport } from "../server/import-schema.js";
 import { createLocalServer } from "../server/local-server.js";
 import { API_PATH, IMPORT_TYPE } from "../server/routes.js";
-import { groupZones, summarize } from "../client/model.js";
+import { groupZones, honorProgress, itemQuality, summarize } from "../client/model.js";
+import { ARMORY_VIEW_PATH, armoryRace, armoryUrl } from "../client/armory.js";
+
+test("armory keeps legacy race names and uses the dressing room slot order", () => {
+  assert.equal(armoryRace({ race: "Morte-vivante" }), 5);
+  assert.equal(armoryRace({ race: "Skyborne", faction: "Horde" }), 96);
+  assert.equal(armoryRace({ raceId: 95 }), 95);
+  const url = armoryUrl(95, 3, [
+    { slot: 4, itemId: 4 },
+    { slot: 15, itemId: 15 },
+    { slot: 16, itemId: 16, link: "|Hitem:16:1900:0|h[Épée]|h" },
+    { slot: 19, itemId: 19 },
+  ]);
+  assert.deepEqual(Object.fromEntries(url.searchParams), { r: "95", a: "1", g: "d15.f4.g19.q16e1900" });
+});
+
+test("equipment metadata survives import and legacy links still supply quality", () => {
+  const input = batch();
+  Object.assign(input.character, { raceId: 95, sex: 3 });
+  Object.assign(input.snapshots[1].equipment[0], { icon: 133138, quality: 4 });
+  const imported = validateImport(input);
+  assert.equal(imported.character.raceId, 95);
+  assert.equal(imported.character.sex, 3);
+  const [item] = imported.snapshots[1].equipment;
+  assert.equal(item.icon, 133138);
+  assert.equal(itemQuality(item), 4);
+  assert.equal(itemQuality({ link: "|cffff8000|Hitem:19019|h[Thunderfury]|h|r" }), 5);
+  assert.equal(itemQuality({ link: "|cnIQ3:|Hitem:1|h[Rare item]|h|r" }), 3);
+  assert.equal(itemQuality({}), -1);
+});
+
+test("honor progress preserves zero and attributes guild gains using the last observed membership", () => {
+  const gain = (at, amount, context = "world") => ({ at, amount, context, type: "honor-gain" });
+  const one = {
+    snapshots: [{ at: 10, guild: "Guild" }, { at: 20, guild: "Other" }],
+    events: [gain(9, 4), gain(15, 2), gain(18, 6, "pvp"), gain(21, 8)],
+  };
+  const two = { snapshots: [{ at: 12, guild: "Guild" }], events: [gain(15, 3), gain(25, 1)] };
+  assert.equal(honorProgress([one]).total, 14);
+  assert.deepEqual(honorProgress([one, two], "Guild"), {
+    start: 10, end: 25, total: 6,
+    points: [{ at: 15, total: 5 }, { at: 25, total: 6 }],
+  });
+  assert.deepEqual(honorProgress([{ snapshots: [{ at: 10 }], events: [] }]), {
+    start: 10, end: 10, total: 0, points: [],
+  });
+  assert.equal(honorProgress([{ snapshots: [], events: [] }]), null);
+});
 
 function batch() {
   return {
@@ -166,6 +213,11 @@ test("local HTTP transport rejects foreign hosts/origins and oversized requests"
   );
   const url = `http://127.0.0.1:${server.address().port}`;
   assert.equal((await fetch(url)).status, 200);
+  const armory = await fetch(url + ARMORY_VIEW_PATH + "?r=95&a=1&g=a12640.q19019");
+  assert.equal(armory.status, 200);
+  assert.match(armory.headers.get("content-security-policy"), /frame-src https:\/\/mattjcr\.github\.io\/wowforeverultimatecalculator\/embed\//u);
+  assert.match(await armory.text(), /sandbox="allow-scripts allow-same-origin".*g=a12640\.q19019/u);
+  assert.equal((await fetch(url + ARMORY_VIEW_PATH + "?r=95&a=1&g=%22%3E")).status, 400);
   const foreignHostStatus = await new Promise((resolve, reject) => {
     const call = request(
       url + API_PATH + "/state",
