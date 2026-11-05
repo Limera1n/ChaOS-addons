@@ -40,8 +40,37 @@ la version du client avant de considérer l'addon compatible. Les API absentes
 ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
-Le fichier est produit dans `data/ChaOSWorldPvP-0.1.0.zip` (hors Git). Décompresser
+Le fichier est produit à la racine du dépôt dans
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.1.0.zip` (hors Git et hors du paquet
+installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
+
+## Corriger « Add-on must not ship its data folders: data »
+
+L'installateur ChaOS refuse tout dossier `data` provenant du paquet téléchargé,
+même si `addon.json` ne déclare pas de données. Les sauvegardes locales restent
+dans `data/`, mais ne doivent jamais être publiées avec le code.
+
+Depuis le dépôt source qui est effectivement téléchargé par ChaOS, vérifier :
+
+```powershell
+git ls-files -- applications/wow-forever-pvp/data
+```
+
+Si des fichiers apparaissent, les retirer du suivi Git **sans effacer leurs
+copies locales** :
+
+```powershell
+git rm -r --cached -- applications/wow-forever-pvp/data
+```
+
+Inclure ce retrait et le changement du script de création du ZIP dans la prochaine
+révision publiée du dépôt source. Ajouter `data/` à `.gitignore` ne retire pas
+les fichiers déjà suivis. Relancer ensuite l'installation dans ChaOS sur la
+nouvelle révision ; reprendre celle du journal reproduirait le même refus.
+
+Le contrôle `node scripts/check-addons.mjs`, lancé à la racine du dépôt, détecte
+désormais ces fichiers suivis, y compris sans déclaration `data` dans le manifeste.
 
 ## Ce qui existe
 
