@@ -3,8 +3,10 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createTrackerStore } from "./store.js";
 import { MAX_IMPORT_BYTES } from "./import-schema.js";
+import { API_PATH, IMPORT_TYPE, importErrorStatus } from "./routes.js";
 
-// This transport is intentionally local. Shared ChaOS hosting needs its account guards.
+// This transport is intentionally local and has no accounts: ChaOS serves the
+// same client through server/index.js, behind its account guards.
 export function createLocalServer({
   dataDir = fileURLToPath(new URL("../data/", import.meta.url)),
 } = {}) {
@@ -46,13 +48,13 @@ export function createLocalServer({
       response.writeHead(200, { "Content-Type": asset.type });
       return response.end(asset.body);
     }
-    if (request.method === "GET" && request.url === "/api/state")
+    if (request.method === "GET" && request.url === API_PATH + "/state")
       return reply(200, store.read());
-    if (request.method !== "POST" || request.url !== "/api/import")
+    if (request.method !== "POST" || request.url !== API_PATH + "/import")
       return reply(404, { error: "Introuvable." });
     if (
       request.headers.origin !== `http://${host}` ||
-      request.headers["content-type"] !== "application/json"
+      request.headers["content-type"] !== IMPORT_TYPE
     ) {
       return reply(403, {
         error: "Import depuis cette application uniquement.",
@@ -73,14 +75,13 @@ export function createLocalServer({
       const input = JSON.parse(Buffer.concat(chunks).toString("utf8"));
       return reply(200, store.importBatch(input));
     } catch (error) {
-      const isInputError =
-        error instanceof SyntaxError ||
-        /Export invalide|Conflit|Limite du prototype/u.test(error.message);
-      if (!isInputError) console.error("Tracker import failed", error);
-      return reply(isInputError ? 400 : 500, {
-        error: isInputError
-          ? error.message
-          : "Échec de sauvegarde ; import non appliqué.",
+      const status = importErrorStatus(error);
+      if (status === 500) console.error("Tracker import failed", error);
+      return reply(status, {
+        error:
+          status === 400
+            ? error.message
+            : "Échec de sauvegarde ; import non appliqué.",
       });
     }
   });

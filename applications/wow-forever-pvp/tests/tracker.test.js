@@ -7,6 +7,7 @@ import { request } from "node:http";
 import { createTrackerStore } from "../server/store.js";
 import { validateImport } from "../server/import-schema.js";
 import { createLocalServer } from "../server/local-server.js";
+import { API_PATH, IMPORT_TYPE } from "../server/routes.js";
 import { groupZones, summarize } from "../client/model.js";
 
 function batch() {
@@ -167,7 +168,7 @@ test("local HTTP transport rejects foreign hosts/origins and oversized requests"
   assert.equal((await fetch(url)).status, 200);
   const foreignHostStatus = await new Promise((resolve, reject) => {
     const call = request(
-      url + "/api/state",
+      url + API_PATH + "/state",
       { headers: { Host: "attacker.example" } },
       (response) => {
         response.resume();
@@ -179,9 +180,9 @@ test("local HTTP transport rejects foreign hosts/origins and oversized requests"
   });
   assert.equal(foreignHostStatus, 403);
   const post = (body, origin = url) =>
-    fetch(url + "/api/import", {
+    fetch(url + API_PATH + "/import", {
       method: "POST",
-      headers: { Origin: origin, "Content-Type": "application/json" },
+      headers: { Origin: origin, "Content-Type": IMPORT_TYPE },
       body,
     });
   assert.equal(
@@ -191,6 +192,6 @@ test("local HTTP transport rejects foreign hosts/origins and oversized requests"
   assert.equal((await post("{")).status, 400);
   assert.equal((await post("x".repeat(2 * 1024 * 1024 + 1))).status, 413);
   assert.equal((await post(JSON.stringify(batch()))).status, 200);
-  const state = await (await fetch(url + "/api/state")).json();
+  const state = await (await fetch(url + API_PATH + "/state")).json();
   assert.equal(state.characters.length, 1);
 });

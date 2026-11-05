@@ -1,5 +1,9 @@
 import { groupZones, summarize } from "./model.js";
 
+// Same paths as server/routes.js; the client cannot import server code.
+const API_PATH = "/api/wow-forever-pvp";
+const IMPORT_TYPE = "application/vnd.chaos-world-pvp+json";
+
 const $ = (selector) => document.querySelector(selector);
 const date = (at) =>
   at == null ? "Non relevé" : new Date(at * 1000).toLocaleString("fr-FR");
@@ -40,7 +44,7 @@ let selectedMap = "all";
 let selectedEvents = [];
 
 async function load() {
-  const response = await fetch("/api/state");
+  const response = await fetch(API_PATH + "/state");
   if (!response.ok) throw new Error("Impossible de charger les relevés.");
   state = await response.json();
   if (!state.characters.some((item) => item.key === selectedKey))
@@ -183,11 +187,13 @@ $("#import-form").addEventListener("submit", async (event) => {
     if (new TextEncoder().encode(payload).byteLength > 2 * 1024 * 1024)
       throw new Error("Export trop volumineux (2 Mio maximum).");
     JSON.parse(payload);
-    const response = await fetch("/api/import", {
+    const response = await fetch(API_PATH + "/import", {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: { "Content-Type": IMPORT_TYPE },
       body: payload,
     });
+    if (response.status === 401)
+      throw new Error("Connectez-vous à ChaOS pour importer un relevé.");
     const result = await response.json();
     if (!response.ok) throw new Error(result.error);
     await load();

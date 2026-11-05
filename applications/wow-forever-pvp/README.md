@@ -1,10 +1,25 @@
-# WoW Forever PvP — prototype 0.1
+# WoW Forever PvP — prototype 0.2
 
-Application locale de suivi du PvP sauvage, accompagnée d'un addon WoW
-expérimental. **Pas encore installée dans ChaOS et pas encore testée dans le
-client Forever.** Aucune API web Blizzard ni dépendance npm n'est nécessaire.
+Application de suivi du PvP sauvage, accompagnée d'un addon WoW expérimental.
+Elle s'installe comme application ChaOS (contrat `chaosAddonApi: 2`) ou tourne
+seule en local. **Pas encore testée dans le client Forever.** Aucune API web
+Blizzard ni dépendance npm n'est nécessaire.
 
-## Démarrer l'application
+## Dans ChaOS
+
+Ajouter le dépôt qui contient ce paquet dans le panneau admin (onglet
+Add-ons), installer « WoW Forever PvP » puis redémarrer le site. L'application
+s'ouvre dans sa propre fenêtre du bureau (`client/index.html`).
+
+- Tout le monde consulte le carnet ; seul un compte ChaOS connecté peut
+  importer un relevé, et uniquement depuis le site (`server/index.js`).
+- Les relevés sont stockés dans `games/wow-forever-pvp/data/tracker.json` sur le
+  serveur. Ce dossier est conservé lors des mises à jour et désinstallations, et
+  monté comme volume par la composition Docker générée.
+- L'API est servie sous `/api/wow-forever-pvp/` (`state` en lecture, `import`
+  en écriture, 2 Mio maximum).
+
+## Démarrer seule en local
 
 Avec Node.js 24 ou plus récent, depuis ce dossier :
 
@@ -17,9 +32,9 @@ Arrêter avec Ctrl+C. Le port est fixe dans ce prototype.
 
 Les imports sont stockés dans `data/tracker.json`, hors Git. Copier ce fichier
 serveur arrêté pour une sauvegarde. Le navigateur n'est pas le stockage : ouvrir
-un autre navigateur sur la même application retrouve les données. Le prototype
-n'a pas d'authentification et ne doit pas être exposé sur Internet ; l'intégration
-aux comptes et droits ChaOS reste à faire.
+un autre navigateur sur la même application retrouve les données. Ce mode local
+n'a pas d'authentification et ne doit pas être exposé sur Internet : pour un
+usage partagé, passer par ChaOS et ses comptes.
 
 ## Installer l'addon WoW
 
@@ -45,11 +60,13 @@ Le fichier est produit à la racine du dépôt dans
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
-## Corriger « Add-on must not ship its data folders: data »
+## Publier le paquet
 
-L'installateur ChaOS refuse tout dossier `data` provenant du paquet téléchargé,
-même si `addon.json` ne déclare pas de données. Les sauvegardes locales restent
-dans `data/`, mais ne doivent jamais être publiées avec le code.
+L'installateur ChaOS refuse tout dossier `data` provenant du paquet téléchargé
+(« Add-on must not ship its data folders: data ») : ce dossier contient les
+relevés du site et n'est jamais remplacé par une mise à jour. Les sauvegardes
+locales restent dans `data/`, mais ne doivent jamais être publiées avec le code,
+pas plus que le ZIP de l'addon WoW.
 
 Depuis le dépôt source qui est effectivement téléchargé par ChaOS, vérifier :
 
@@ -122,7 +139,9 @@ npm test
 ```
 
 Les tests Node vérifient le format d'import, les compteurs, le dédoublonnage,
-les conflits, la persistance et le transport local. Aucun test ne remplit la base
+les conflits, la persistance et le transport local. Une fois le paquet installé
+dans ChaOS, `npm run test:addons` (depuis le site) exécute aussi
+`tests/chaos/feature.test.js` : comptes, origine, type et taille des imports. Aucun test ne remplit la base
 de l'application avec des personnages de démonstration.
 
 Le scénario Lua `tests/collector.test.lua` s'exécute avec Lua 5.4 depuis ce dossier :
@@ -139,4 +158,4 @@ listés dans le [cadrage](../../docs/wow-forever-pvp.md).
 
 Installer l'addon sur le client Forever et recueillir un export réel ainsi que
 le résultat de `/cvp status`. Corriger les incompatibilités observées avant
-d'ajouter l'attribution PvP, les fonds de carte ou le raccordement à ChaOS.
+d'ajouter l'attribution PvP ou les fonds de carte.
