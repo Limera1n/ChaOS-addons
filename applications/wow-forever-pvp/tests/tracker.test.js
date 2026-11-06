@@ -35,17 +35,24 @@ test("armory keeps legacy race names and uses the dressing room slot order", () 
     { slot: 19, itemId: 19 },
   ]);
   assert.deepEqual(Object.fromEntries(url.searchParams), { r: "95", a: "1", g: "d15.f4.g19.q16e1900" });
+  assert.equal(armoryUrl(8, 2, []).searchParams.get("a"), "0b2");
+  assert.equal(armoryUrl(1, 3, [], 5).searchParams.get("a"), "1b5");
+  const appearance = { raceId: 8, sex: 2, choices: [{ optionId: 31, choiceId: 130 }] };
+  assert.equal(armoryUrl(8, 2, [], 8, appearance).searchParams.get("a"), "0b2.31-130");
+  assert.equal(armoryUrl(8, 3, [], 8, appearance).searchParams.get("a"), "1b2");
 });
 
 test("equipment metadata survives import and legacy links still supply quality", () => {
   const input = batch();
   Object.assign(input.character, { raceId: 95, sex: 3 });
   Object.assign(input.snapshots[1].equipment[0], { icon: 133138, quality: 4 });
+  input.snapshots[1].equipment[0].tooltip = [{ text: "+2 Agilité", effect: true }];
   const imported = validateImport(input);
   assert.equal(imported.character.raceId, 95);
   assert.equal(imported.character.sex, 3);
   const [item] = imported.snapshots[1].equipment;
   assert.equal(item.icon, 133138);
+  assert.deepEqual(item.tooltip, [{ text: "+2 Agilité", effect: true }]);
   assert.equal(itemQuality(item), 4);
   assert.equal(itemQuality({ link: "|cffff8000|Hitem:19019|h[Thunderfury]|h|r" }), 5);
   assert.equal(itemQuality({ link: "|cnIQ3:|Hitem:1|h[Rare item]|h|r" }), 3);
@@ -147,7 +154,7 @@ test("reimports fill missing equipment metadata without rewriting observations",
   store.importBatch(legacy);
   const enriched = batch();
   const item = enriched.snapshots[1].equipment[0];
-  Object.assign(item, { icon: 133138, quality: 0 });
+  Object.assign(item, { icon: 133138, quality: 0, tooltip: [{ text: "+2 Agilité" }] });
 
   enriched.events[0].amount = 99;
   assert.throws(() => store.importBatch(enriched), /Conflit/);
@@ -169,6 +176,26 @@ test("reimports fill missing equipment metadata without rewriting observations",
   item.itemId--;
   item.icon++;
   assert.throws(() => store.importBatch(enriched), /Conflit/);
+});
+
+test("imports retain the most recent compatible appearance without requiring a new capture", (t) => {
+  const store = createTrackerStore({ dataDir: temporary(t) });
+  const current = batch();
+  Object.assign(current.character, { raceId: 5, sex: 3 });
+  const appearance = { raceId: 5, sex: 3, at: 150, choices: [{ optionId: 31, choiceId: 130 }] };
+  current.character.appearance = appearance;
+  store.importBatch(current);
+  const legacy = batch();
+  Object.assign(legacy.character, { raceId: 5, sex: 3 });
+  store.importBatch(legacy);
+  const newer = structuredClone(current);
+  newer.character.appearance.at = 190;
+  newer.character.appearance.choices[0].choiceId = 131;
+  store.importBatch(newer);
+  store.importBatch(current);
+  assert.deepEqual(store.read().characters[0].appearance, newer.character.appearance);
+  current.character.appearance.choices.push({ optionId: 31, choiceId: 132 });
+  assert.throws(() => validateImport(current), /Export invalide/);
 });
 
 test("late imports preserve metadata and sort observations by collection time", (t) => {
@@ -275,9 +302,16 @@ test("local HTTP transport rejects foreign hosts/origins and oversized requests"
   const url = `http://127.0.0.1:${server.address().port}`;
   assert.equal((await fetch(url)).status, 200);
   const armory = await fetch(url + ARMORY_VIEW_PATH + "?r=95&a=1&g=a12640.q19019");
+  assert.equal((await fetch(url + API_PATH + "/item-tooltip?shard=256")).status, 400);
   assert.equal(armory.status, 200);
   assert.match(armory.headers.get("content-security-policy"), /frame-src https:\/\/mattjcr\.github\.io\/wowforeverultimatecalculator\/embed\//u);
   assert.match(await armory.text(), /sandbox="allow-scripts allow-same-origin".*g=a12640\.q19019/u);
+  assert.equal((await fetch(url + ARMORY_VIEW_PATH + "?r=8&a=0b2")).status, 200);
+  const customArmory = await fetch(url + ARMORY_VIEW_PATH + "?r=8&a=0b2.31-130~33-211");
+  assert.equal(customArmory.status, 200);
+  assert.match(await customArmory.text(), /a=0b2\.31-130%7E33-211/u);
+  assert.equal((await fetch(url + ARMORY_VIEW_PATH + "?r=8&a=0b2.31-0")).status, 400);
+  assert.equal((await fetch(url + ARMORY_VIEW_PATH + "?r=8&a=0b999")).status, 400);
   assert.equal((await fetch(url + ARMORY_VIEW_PATH + "?r=95&a=1&g=%22%3E")).status, 400);
   const foreignHostStatus = await new Promise((resolve, reject) => {
     const call = request(

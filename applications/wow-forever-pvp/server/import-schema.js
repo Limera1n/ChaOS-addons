@@ -33,6 +33,24 @@ function oneOf(value, options) {
   if (!options.includes(value)) fail();
   return value;
 }
+function characterAppearance(value, character, exportedAt) {
+  record(value);
+  const at = integer(value.at);
+  const raceId = integer(value.raceId, 10000);
+  const sex = oneOf(value.sex, [2, 3]);
+  if (!raceId || at > exportedAt || raceId !== character.raceId || sex !== character.sex) fail();
+  const seen = new Set();
+  const choices = list(value.choices, 64).map((pair) => {
+    record(pair);
+    const optionId = integer(pair.optionId, 999999999);
+    const choiceId = integer(pair.choiceId, 999999999);
+    if (!optionId || !choiceId || seen.has(optionId)) fail();
+    seen.add(optionId);
+    return { optionId, choiceId };
+  });
+  if (!choices.length) fail();
+  return { at, raceId, sex, choices };
+}
 function location(value) {
   if (value == null) return null;
   record(value);
@@ -83,6 +101,8 @@ export function validateImport(input) {
     snapshots: [],
     events: [],
   };
+  if (character.appearance != null)
+    result.character.appearance = characterAppearance(character.appearance, result.character, result.exportedAt);
   const seen = new Set();
   function identity(item) {
     record(item);
@@ -106,6 +126,16 @@ export function validateImport(input) {
         link: optionalString(slot.link, 2048),
         ...(slot.icon == null ? {} : { icon: integer(slot.icon, 1000000000) }),
         ...(slot.quality == null ? {} : { quality: integer(slot.quality, 8) }),
+        ...(slot.tooltip == null ? {} : {
+          tooltip: list(slot.tooltip, 20).map((line) => {
+            record(line);
+            return {
+              text: string(line.text, 300),
+              ...(line.right == null ? {} : { right: string(line.right, 300) }),
+              ...(line.effect === true ? { effect: true } : {}),
+            };
+          }),
+        }),
       };
     }),
   }));

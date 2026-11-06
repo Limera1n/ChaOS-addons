@@ -1,6 +1,8 @@
 import { groupZones, honorProgress, itemQuality, summarize } from "./model.js";
-import { mountArmory } from "./armory.js";
+import { itemEnchant, mountArmory } from "./armory.js";
 import { AZEROTH, mapContains, mapRegions, projectPosition } from "./map-regions.js";
+import { mapOutlines } from "./map-outlines.js";
+import { bindEquipmentTooltips, hideEquipmentTooltip } from "./item-tooltips.js";
 
 // Same paths as server/routes.js; the client cannot import server code.
 const API_PATH = "/api/wow-forever-pvp";
@@ -52,20 +54,27 @@ const slots = [
   "Distance",
   "Tabard",
 ];
-const qualities = ["Médiocre", "Commun", "Inhabituel", "Rare", "Épique", "Légendaire", "Artefact", "Héritage", "Jeton"];
+const equipmentColumns = {
+  left: [1, 2, 3, 15, 5, 4, 19, 9],
+  right: [10, 6, 7, 8, 11, 12, 13, 14],
+  weapons: [16, 17, 18],
+};
+const emptySlotIcons = ["", "◈", "♢", "◆", "♜", "♜", "▰", "Ⅱ", "◧", "▤", "✥", "◯", "◯", "✦", "✦", "◩", "⚔", "⛨", "➶", "♜"];
 
-function equipmentRow(item) {
+function equipmentRow(slot, item) {
+  const placeholder = `<span aria-hidden="true">${emptySlotIcons[slot]}</span>`;
+  if (!item) return `<li class="item item-empty" data-slot="${slot}" aria-label="${slots[slot]} vide" title="${slots[slot]} · vide"><span class="item-icon">${placeholder}</span></li>`;
   const quality = itemQuality(item);
   const name = item.link?.match(/\[([^\]]+)\]/u)?.[1] ?? `Objet #${item.itemId}`;
   const icon = Number.isSafeInteger(item.icon) && item.icon > 0
-    ? `<img src="https://zephras.com/icons/card/${item.icon}.jpg" alt="" width="42" height="42" referrerpolicy="no-referrer">`
+    ? `<img src="https://zephras.com/icons/card/${item.icon}.jpg" alt="" width="56" height="56" referrerpolicy="no-referrer">`
     : "";
-  return `<li class="item" data-quality="${quality}">
-    <span class="item-icon" aria-hidden="true"><span>◇</span>${icon}</span>
+  const enchant = itemEnchant(item);
+  return `<li class="item" tabindex="0" data-slot="${slot}" data-quality="${quality}">
+    <span class="item-icon" aria-hidden="true">${placeholder}${icon}</span>
     <div class="item-info">
-      <span class="item-slot">${slots[item.slot]}</span>
       <strong>${escape(name)}</strong>
-      ${qualities[quality] ? `<span class="item-quality">${qualities[quality]}</span>` : ""}
+      ${enchant ? `<small>Enchantement #${enchant}</small>` : ""}
     </div>
   </li>`;
 }
@@ -75,6 +84,30 @@ let selectedMap = AZEROTH;
 let selectedEvents = [];
 let mapNames = new Map();
 let honorScope = "character";
+let profileView = "character";
+
+function factionMark(faction) {
+  if (faction === "horde") {
+    return `<path fill="#a81615" stroke="#d45129" d="M48 3 65 17l10-2 1 11 11 13-7 3 8 8-17 7-8-7-7 11 6 11-9 11-5 15-5-15-9-11 6-11-7-11-8 7-17-7 8-8-7-3 11-13 1-11 10 2Zm0 17L30 39l18 22 18-22Zm0 7 9 12-9 10-9-10Z" fill-rule="evenodd"/>`;
+  }
+  if (faction === "alliance") {
+    return `<path fill="#235695" stroke="#f4b92e" stroke-width="4" d="M48 7 80 18v30c0 23-15 37-32 46C31 85 16 71 16 48V18Z"/><path fill="#efbd51" d="m29 28 12 5 7-12 7 12 12-5-5 13 2 16-8 13-8 6-8-6-8-13 2-16Zm8 17 3 8 5-4Zm22 0-8 4 5 4Zm-18 14 7 7 7-7Z" fill-rule="evenodd"/>`;
+  }
+  return `<path fill="none" stroke="#c9a158" stroke-width="4" d="M48 8 84 49 48 90 12 49Z M31 65l34-34M31 31l34 34"/>`;
+}
+
+function setProfileView(view) {
+  hideEquipmentTooltip();
+  profileView = view;
+  const panel = $(".armory");
+  panel.dataset.view = view;
+  for (const button of panel.querySelectorAll("[data-profile-view]")) {
+    button.setAttribute("aria-pressed", String(button.dataset.profileView === view));
+  }
+  $("#armory-character").hidden = view !== "character";
+  $("#armory-pvp").hidden = view !== "pvp";
+  $("#activity").hidden = view !== "pvp";
+}
 
 function renderHonorProgress(character, guild) {
   const panel = $(".honor-progress");
@@ -155,16 +188,69 @@ function renderRoster() {
     $("#roster").append(button);
   }
 }
+function armoryEquipment(snapshot) {
+  const items = new Map((snapshot?.equipment ?? []).map((item) => [item.slot, item]));
+  const column = (side, label) => `<ul class="equipment equipment-${side}" aria-label="${label}">${equipmentColumns[side].map((slot) => equipmentRow(slot, items.get(slot))).join("")}</ul>`;
+  return `<div id="armory-character">
+    <div class="armory-loadout">
+      ${column("left", "Équipement de gauche")}
+      <div class="armory-stage">
+        <div class="armory-placeholder">
+          <span aria-hidden="true">⚔</span>
+          <p>Choisis la race et la silhouette pour afficher le personnage.</p>
+        </div>
+      </div>
+      ${column("right", "Équipement de droite")}
+      ${column("weapons", "Armes")}
+    </div>
+    <div class="armory-footer">
+      <span><b class="armory-zone"></b> Équipement relevé le ${escape(date(snapshot?.at))}</span>
+      <span class="armory-appearance"></span>
+      <form class="armory-controls">
+        <label>Race du modèle
+          <select name="armory-race" required><option value="">Choisir une race</option></select>
+        </label>
+        <label>Silhouette
+          <select name="armory-body" required>
+            <option value="">Choisir une silhouette</option>
+            <option value="2">Masculine</option>
+            <option value="3">Féminine</option>
+          </select>
+        </label>
+        <button type="submit">Afficher en 3D</button>
+      </form>
+      <a class="armory-link" target="_blank" rel="noopener noreferrer" hidden>Ouvrir le vestiaire ↗</a>
+    </div>
+  </div>`;
+}
+
 function render() {
+  hideEquipmentTooltip();
   renderRoster();
   const character = state.characters.find((item) => item.key === selectedKey);
   if (!character) return;
   const summary = summarize(character);
   const latest = summary.latest;
+  const guild = latest?.guild;
   $("#profile").innerHTML =
-    `<div class="identity"><div><p class="eyebrow">${escape(character.faction ?? "FACTION INCONNUE")} / ${escape(character.realm)}</p><h2>${escape(character.name)}</h2><p>${escape(character.race ?? "Race inconnue")} · ${escape(character.class ?? "Classe inconnue")} · Niveau ${count(character.level)}</p><p>${escape(latest?.guild ?? "Guilde non relevée")} · Règles : ${escape(character.ruleset === "unknown" ? "Non renseignées" : character.ruleset)}</p></div><span class="sigil" aria-hidden="true">⚔</span></div>
+    `<section class="armory" aria-labelledby="armory-title">
+    <img class="armory-backdrop" alt="" referrerpolicy="no-referrer" hidden>
+    <div class="identity">
+      <svg class="sigil" viewBox="0 0 96 100" role="img" aria-label="${escape(character.faction ?? "Faction inconnue")}">${factionMark(character.faction?.toLowerCase())}</svg>
+      <h2 id="armory-title">${escape(character.name)}</h2>
+      <div class="armory-identity-meta">
+        <strong>⚔ ${count(latest?.equipment.length ?? 0)} / 19 PIÈCES</strong>
+        <p>${count(character.level)} ${escape(character.race ?? "Race inconnue")} ${escape(character.class ?? "Classe inconnue")}${guild ? ` <span>&lt;${escape(guild)}&gt;</span>` : ""} · ${escape(character.realm)}</p>
+      </div>
+    </div>
+    <nav class="armory-tabs" aria-label="Vues de la fiche">
+      <button type="button" data-profile-view="character" aria-controls="armory-character">Personnage</button>
+      <button type="button" data-profile-view="pvp" aria-controls="armory-pvp activity">Joueur contre joueur</button>
+    </nav>
+    ${armoryEquipment(latest)}
+    <div id="armory-pvp" hidden>
     <div class="metrics"><div class="metric"><strong>${count(summary.lifetimeHK)}</strong><span>VH cumulées · tous contextes</span></div><div class="metric"><strong>${count(summary.worldHK)}</strong><span>VH observées · monde ouvert</span></div><div class="metric"><strong>${count(summary.deaths)}</strong><span>Morts observées · monde ouvert</span></div><div class="metric"><strong>${summary.delta == null ? "—" : "+" + count(summary.delta)}</strong><span>Écart du compteur · tous contextes</span></div></div>
-    <p class="muted">Compteur relevé le ${escape(date(summary.counterAt))}. Dernier import : ${escape(date(character.lastImportedAt))}. Historique limité aux sessions collectées ; relevés auto-déclarés.</p>
+    <p class="muted">Compteur relevé le ${escape(date(summary.counterAt))}. Dernier import le ${escape(date(character.lastImportedAt))}. Règles de jeu ${escape(character.ruleset === "unknown" ? "non renseignées" : character.ruleset)}.</p>
     <section class="honor-progress" aria-labelledby="honor-title">
       <div class="honor-heading">
         <div><p class="eyebrow">MONDE OUVERT</p><h3 id="honor-title">Évolution des VH</h3></div>
@@ -188,48 +274,13 @@ function render() {
       </div>
       <p class="muted honor-note"></p>
     </section>
-    <div class="armory-layout">
-      <section class="armory" aria-labelledby="armory-title">
-        <div class="armory-heading">
-          <h3 id="armory-title">Portrait du combattant</h3>
-          <span class="badge">3D · 360°</span>
-        </div>
-        <div class="armory-stage">
-          <div class="armory-placeholder">
-            <span aria-hidden="true">⚔</span>
-            <p>Le personnage et l’équipement du dernier relevé.</p>
-          </div>
-        </div>
-        <p class="armory-appearance" hidden></p>
-        <form class="armory-controls">
-          <label>Race du modèle
-            <select name="armory-race" required><option value="">Choisir une race</option></select>
-          </label>
-          <label>Silhouette
-            <select name="armory-body" required>
-              <option value="">Choisir une silhouette</option>
-              <option value="2">Masculine</option>
-              <option value="3">Féminine</option>
-            </select>
-          </label>
-          <button type="submit">Afficher en 3D</button>
-        </form>
-        <p class="muted">Glissez pour tourner. Molette ou pincement pour zoomer. Le vestiaire externe reçoit la race, la silhouette et les identifiants des objets.</p>
-        <p class="muted">Les pièces disponibles dans le vestiaire s’affichent avec leurs textures du jeu. Le visage et les couleurs du personnage suivent le modèle par défaut.</p>
-        <a class="armory-link" target="_blank" rel="noopener noreferrer" hidden>Ouvrir le modèle dans un nouvel onglet ↗</a>
-      </section>
-      <section class="arsenal" aria-labelledby="equipment-title">
-        <div class="arsenal-heading">
-          <div><p class="eyebrow">ARSENAL</p><h3 id="equipment-title">Équipement</h3></div>
-          <span class="badge">${count(latest?.equipment.length ?? 0)} / 19</span>
-        </div>
-        <p class="muted arsenal-date">Relevé · ${escape(date(latest?.at))}</p>
-        ${latest?.equipment.length
-          ? `<ul class="equipment">${latest.equipment.map(equipmentRow).join("")}</ul>`
-          : '<p class="muted">Aucun équipement lisible dans ce relevé.</p>'}
-      </section>
-    </div>`;
+    </div>
+    </section>`;
   mountArmory($(".armory"), character, latest);
+  bindEquipmentTooltips($("#profile"), latest?.equipment ?? []);
+  for (const button of $(".armory").querySelectorAll("[data-profile-view]")) {
+    button.addEventListener("click", () => setProfileView(button.dataset.profileView));
+  }
   renderHonorProgress(character, latest?.guild);
   for (const icon of $("#profile").querySelectorAll(".item-icon img"))
     icon.addEventListener("error", () => icon.remove(), { once: true });
@@ -255,7 +306,7 @@ function render() {
         )
         .join("")
     : '<p class="muted">Aucun événement en monde ouvert collecté.</p>';
-  $("#activity").hidden = false;
+  setProfileView(profileView);
   selectMap(selectedMap);
 }
 function selectMap(mapId) {
@@ -296,9 +347,30 @@ function zoomTo(mapId) {
   selectMap(mapId);
   $(mapId === AZEROTH ? "#map-filter" : "#map-zoom-out").focus({ preventScroll: true });
 }
+function bindMapTarget(element, id) {
+  const name = mapNames.get(id);
+  element.setAttribute("role", "button");
+  element.setAttribute("tabindex", "0");
+  element.setAttribute("aria-label", `Zoomer sur ${name}`);
+  const label = $("#map-target");
+  const updateLabel = () => {
+    const active = element.matches(":hover, :focus-visible");
+    label.hidden = !active;
+    if (active) label.textContent = name;
+  };
+  for (const event of ["pointerenter", "pointerleave", "focus", "blur"])
+    element.addEventListener(event, updateLabel);
+  element.addEventListener("click", () => zoomTo(id));
+  element.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter" && event.key !== " ") return;
+    event.preventDefault();
+    zoomTo(id);
+  });
+}
 function renderMap(events) {
   const map = $("#map");
   map.replaceChildren();
+  $("#map-target").hidden = true;
   const note = $("#map-note");
   const art = $("#map-art");
   const mapId = selectedMap;
@@ -311,20 +383,14 @@ function renderMap(events) {
     note.textContent = "Aucune carte relevée pour cette sélection.";
     return;
   }
-  const children = [...mapRegions]
-    .filter(([, region]) => region.parent === mapId && region.bounds)
-    .map(([id, region]) => {
-      const [left, top, right, bottom] = region.hit ?? region.bounds;
-      return { id, left, top, width: right - left, height: bottom - top };
-    })
-    .sort((a, b) => b.width * b.height - a.width * a.height);
+  const children = [...mapOutlines].filter(([id]) => mapRegions.get(id).parent === mapId);
   const positioned = events.filter((event) => event.location?.x != null);
   const points = positioned.flatMap((item) => {
     const position = projectPosition(item.location, mapId);
     return position ? [{ item, ...position }] : [];
   });
   const description = [
-    children.length ? "Cliquez sur une région ou sur un marqueur pour zoomer." : "",
+    children.length ? "Survolez une zone pour voir son nom. Cliquez pour zoomer." : "",
     positioned.length > points.length ? "Certaines positions sont visibles uniquement sur leur carte de zone." : "",
     !positioned.length ? "Aucune coordonnée relevée sur cette carte." : "",
   ].filter(Boolean).join(" ");
@@ -340,22 +406,10 @@ function renderMap(events) {
   art.replaceChildren(image);
   image.src = `${MAP_ART}${mapId}.webp`;
 
-  for (const { id, left, top, width, height } of children) {
-    const regionName = mapNames.get(id);
-    const rect = svgElement("rect", {
-      class: "map-region", x: left * 150, y: top * 100, width: width * 150, height: height * 100,
-      tabindex: "0", role: "button", "aria-label": `Zoomer sur ${regionName}`,
-    });
-    const title = svgElement("title", {});
-    title.textContent = regionName;
-    rect.append(title);
-    rect.addEventListener("click", () => zoomTo(id));
-    rect.addEventListener("keydown", (event) => {
-      if (event.key !== "Enter" && event.key !== " ") return;
-      event.preventDefault();
-      zoomTo(id);
-    });
-    map.append(rect);
+  for (const [id, path] of children) {
+    const outline = svgElement("path", { class: "map-region", d: path });
+    bindMapTarget(outline, id);
+    map.append(outline);
   }
   for (const { item, x, y } of points) {
     const sourceMap = String(item.location.mapId);

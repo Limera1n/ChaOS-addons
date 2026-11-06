@@ -8,6 +8,7 @@
     <script type="module" src="app.js"></script>
   </head>
   <body>
+    <div id="equipment-tooltip" role="tooltip" hidden></div>
     <header>
       <span class="brand">CHAOS <span>/ APPLICATIONS</span></span
       ><span class="badge">PROTOTYPE · 0.5</span>
@@ -80,11 +81,12 @@
                 role="group"
                 aria-label="Positions sur la carte sélectionnée"
               ></svg>
+              <span id="map-target" aria-hidden="true" hidden></span>
             </div>
             <p id="map-note" class="muted" role="status"></p>
             <p class="map-caption muted">
               <span><b class="map-honor-key">●</b> VH observées · <b class="map-death-key">×</b> morts personnelles</span>
-              <a href="https://warcraftforever.games/maps" target="_blank" rel="noopener noreferrer">© Blizzard · Warcraft Forever</a>
+              <span>© Blizzard · <a href="https://warcraftforever.games/maps" target="_blank" rel="noopener noreferrer">Fonds Warcraft Forever</a> · <a href="https://zephras.com/forever/enUS/map/" target="_blank" rel="noopener noreferrer">Contours Zephras</a></span>
             </p>
           </section>
           <section>

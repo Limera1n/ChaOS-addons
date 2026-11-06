@@ -1,6 +1,7 @@
 import { ARMORY_EMBED_URL } from "../client/armory.js";
 
 const gearCode = /^[a-s][1-9]\d{0,9}(?:e[1-9]\d{0,8})?(?:\.[a-s][1-9]\d{0,9}(?:e[1-9]\d{0,8})?){0,18}$/u;
+const appearanceCode = /^[01](?:b(?:1|2|3|4|5|6|95))?(?:\.[1-9]\d{0,8}-[1-9]\d{0,8}(?:~[1-9]\d{0,8}-[1-9]\d{0,8}){0,63})?$/u;
 
 // Only this document can frame the external dressing room.
 export function serveArmory(request, response) {
@@ -8,7 +9,7 @@ export function serveArmory(request, response) {
   const race = searchParams.get("r") ?? "";
   const body = searchParams.get("a");
   const gear = searchParams.get("g") ?? "";
-  if (!/^[1-9]\d{0,4}$/u.test(race) || (body !== "0" && body !== "1") || (gear && !gearCode.test(gear))) {
+  if (!/^[1-9]\d{0,4}$/u.test(race) || !appearanceCode.test(body ?? "") || (gear && !gearCode.test(gear))) {
     response.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
     response.end("Paramètres du portrait 3D invalides.");
     return;

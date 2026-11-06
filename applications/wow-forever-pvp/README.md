@@ -21,15 +21,28 @@ s'ouvre dans sa propre fenêtre du bureau (`client/index.html`).
 
 ### Portrait 3D
 
-Dans la fiche joueur, « Afficher en 3D » ouvre le vestiaire avec la race,
-la silhouette et les identifiants des pièces du dernier relevé. L’addon
-sert sa propre page d’intégration. La visionneuse demande un navigateur
-compatible WebGL 2 et un accès au vestiaire externe.
+La fiche joueur place le modèle 3D entre les emplacements d’équipement.
+Le décor suit la zone de départ de la race, même lorsque le personnage a
+été observé ailleurs. Si la race et la silhouette sont disponibles, le
+vestiaire s’ouvre automatiquement avec les pièces du dernier relevé.
+Les anciens relevés peuvent utiliser les sélecteurs manuels. La visionneuse
+demande un navigateur compatible WebGL 2 et un accès au vestiaire externe.
+
+Avec le collecteur 0.5.2, ouvre le salon du barbier en jeu pour relever
+les choix actuels du personnage, comme la coiffure, les couleurs, le
+visage et les détails propres à sa race. Tu peux fermer le salon sans rien
+acheter, puis lancer `/cvp export` et importer le relevé dans ChaOS.
+`/cvp appearance` permet de vérifier ou de rafraîchir la capture au salon.
+Sans relevé d’apparence, la fiche utilise le modèle générique de la race.
 
 L’addon WoW relève la race, la silhouette, les identifiants des icônes et la
 qualité des pièces lors de l’export. Pour un ancien relevé, la fiche propose
 les sélecteurs de modèle et déduit la qualité du lien d’objet quand il la
 contient. Les images des icônes sont servies par [Zephras](https://zephras.com/data/).
+Survoler une pièce ou la sélectionner au clavier affiche ses caractéristiques.
+Le collecteur 0.5.1 joint les lignes lisibles de l’infobulle en jeu à
+l’équipement du relevé courant. Pour les autres relevés, la fiche affiche les
+caractéristiques de base fournies par Zephras et indique leur provenance.
 
 ## Démarrer seule en local
 
@@ -68,7 +81,7 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.0.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.2.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
@@ -145,9 +158,8 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
 - Limite serveur de 100 000 événements/relevés. La sauvegarde du prototype est
   prévue pour un seul processus ; ne pas lancer plusieurs instances sur le même
   fichier. Pas de fusion automatique de plusieurs installations d'un personnage.
-- Le portrait 3D affiche les pièces connues du vestiaire avec leurs textures de
-  base. La personnalisation du personnage et ses transmogrifications restent
-  à relever.
+- Le portrait 3D affiche les choix reconnus par le vestiaire pour son modèle
+  de race et de silhouette. Les pièces gardent leurs textures de base.
 - Honneur, rang, points de rang, talents et adversaires des VH restent à
   implémenter après vérification des API et sources de ressources.
 

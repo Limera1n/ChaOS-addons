@@ -9,10 +9,12 @@ function fillEquipmentMetadata(equipment, otherEquipment) {
     const other = otherEquipment[index];
     const icon = item.icon ?? other?.icon;
     const quality = item.quality ?? other?.quality;
+    const tooltip = item.tooltip ?? other?.tooltip;
     return {
       ...item,
       ...(icon == null ? {} : { icon }),
       ...(quality == null ? {} : { quality }),
+      ...(tooltip == null ? {} : { tooltip }),
     };
   });
 }
@@ -35,13 +37,14 @@ export function createTrackerStore({ dataDir, now = Date.now }) {
   function importBatch(input) {
     assertOpen();
     const batch = validateImport(input);
+    const { appearance, ...metadata } = batch.character;
     const next = structuredClone(state);
     const key = characterKey(batch.character);
     let character = next.characters.find((item) => item.key === key);
     if (!character) {
       character = {
         key,
-        ...batch.character,
+        ...metadata,
         metadataAt: 0,
         snapshots: [],
         events: [],
@@ -51,7 +54,10 @@ export function createTrackerStore({ dataDir, now = Date.now }) {
     // Export time is not observation time: an old file must not replace newer metadata.
     const latestAt = Math.max(0, ...batch.snapshots.map((item) => item.at));
     if (latestAt >= character.metadataAt) {
-      Object.assign(character, batch.character, { metadataAt: latestAt });
+      Object.assign(character, metadata, { metadataAt: latestAt });
+    }
+    if (appearance && (!character.appearance || appearance.at > character.appearance.at)) {
+      character.appearance = appearance;
     }
     let added = 0;
     for (const kind of ["snapshots", "events"]) {
