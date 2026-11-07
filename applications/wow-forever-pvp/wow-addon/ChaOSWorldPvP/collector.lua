@@ -3,6 +3,7 @@ local frame = CreateFrame("Frame")
 local db, profile, baseline, lastLocation, exportFrame
 local isDead, elapsed = false, 0
 local pendingDeath, lastFatalTimestamp
+local combatFatalHit
 local recapRetryDelays = { 0.3, 0.7, 1 }
 
 -- Secret values are discarded before any comparison, conversion or persistence.
@@ -65,8 +66,32 @@ local function event(kind, amount, eventContext, location)
     append("events", item, 5000)
     return item
 end
+local function classifyHit(hit)
+    local kind = read(function() return hit.event end)
+    if kind == "ENVIRONMENTAL_DAMAGE" then return "environment" end
+    local guid = text(read(function() return hit.sourceGUID end))
+    local flags = number(read(function() return hit.sourceFlags end))
+    local sourceType = guid and guid:match("^([^-]+)-")
+    local controlledByPlayer = flags and math.floor(flags / 0x100) % 2 == 1
+    local controlledByNPC = flags and math.floor(flags / 0x200) % 2 == 1
+    local playerGUID = text(read(UnitGUID, "player"))
+    local cause
+    if (guid and guid == playerGUID) or (controlledByPlayer and flags % 2 == 1) then cause = "self"
+    elseif sourceType == "Player" or controlledByPlayer then cause = "pvp"
+    elseif sourceType == "Creature" or sourceType == "Vehicle" or controlledByNPC then cause = "pve" end
+    if not cause then return nil end
+    local source = text(read(function() return hit.sourceName end))
+    if source and (#source > 160 or source:find("[%z\1-\31]")) then source = nil end
+    return cause, source
+end
+local function recapAPI()
+    return C_DeathRecap and C_DeathRecap.GetRecapEvents or DeathRecap_GetEvents
+end
 local function fatalHit(death)
-    local entries = read(C_DeathRecap and C_DeathRecap.GetRecapEvents)
+    if combatFatalHit and math.abs(combatFatalHit.at - death.at) <= 2 then
+        return combatFatalHit.timestamp, combatFatalHit.cause, combatFatalHit.source
+    end
+    local entries = read(recapAPI())
     if type(entries) ~= "table" then return nil end
     local hit, latest
     for _, entry in ipairs(entries) do
@@ -81,22 +106,7 @@ local function fatalHit(death)
     end
     if not hit then return nil end
 
-    local kind = read(function() return hit.event end)
-    if kind == "ENVIRONMENTAL_DAMAGE" then return latest, "environment" end
-    local guid = text(read(function() return hit.sourceGUID end))
-    local flags = number(read(function() return hit.sourceFlags end))
-    local sourceType = guid and guid:match("^([^-]+)-")
-    local controlledByPlayer = flags and math.floor(flags / 0x100) % 2 == 1
-    local controlledByNPC = flags and math.floor(flags / 0x200) % 2 == 1
-    local playerGUID = text(read(UnitGUID, "player"))
-    local cause
-    if (guid and guid == playerGUID) or (controlledByPlayer and flags % 2 == 1) then cause = "self"
-    elseif sourceType == "Player" or controlledByPlayer then cause = "pvp"
-    elseif sourceType == "Creature" or sourceType == "Vehicle" or controlledByNPC then cause = "pve" end
-    if not cause then return nil end
-
-    local source = text(read(function() return hit.sourceName end))
-    if source and (#source > 160 or source:find("[%z\1-\31]")) then source = nil end
+    local cause, source = classifyHit(hit)
     return latest, cause, source
 end
 local function resolveDeath(death, attempt)
@@ -106,11 +116,42 @@ local function resolveDeath(death, attempt)
     if cause then
         death.cause, death.source = cause, source
         lastFatalTimestamp = stamp
+        combatFatalHit = nil
     elseif recapRetryDelays[attempt + 1] and C_Timer and C_Timer.After then
         C_Timer.After(recapRetryDelays[attempt + 1], function() resolveDeath(death, attempt + 1) end)
         return
     end
     pendingDeath = nil
+end
+local function observeCombat(...)
+    local args = { ... }
+    -- Read and classify inside pcall: restricted combat values must never escape.
+    local hit = read(function()
+        if type(CombatLogGetCurrentEventInfo) == "function" then
+            args = { CombatLogGetCurrentEventInfo() }
+        end
+        for _, value in pairs(args) do
+            if issecretvalue and issecretvalue(value) then return nil end
+        end
+        local kind, destination = args[2], args[8]
+        local playerGUID = text(read(UnitGUID, "player"))
+        if not playerGUID or destination ~= playerGUID then return nil end
+        local overkill
+        if kind == "SWING_DAMAGE" then overkill = args[13]
+        elseif kind == "ENVIRONMENTAL_DAMAGE" then overkill = args[14]
+        elseif kind == "SPELL_DAMAGE" or kind == "SPELL_PERIODIC_DAMAGE"
+            or kind == "RANGE_DAMAGE" or kind == "DAMAGE_SHIELD"
+            or kind == "DAMAGE_SPLIT" or kind == "SPELL_BUILDING_DAMAGE" then overkill = args[16]
+        else return nil end
+        if not number(overkill) then return nil end
+        local cause, source = classifyHit({ event = kind, sourceGUID = args[4],
+            sourceName = args[5], sourceFlags = args[6] })
+        if cause then return { at = now(), timestamp = now(), cause = cause, source = source } end
+    end)
+    if hit then
+        combatFatalHit = hit
+        if pendingDeath then resolveDeath(pendingDeath, 0) end
+    end
 end
 local function tooltipText(value)
     value = text(value)
@@ -269,6 +310,7 @@ local function initialize()
         class = text(read(UnitClass, "player")), faction = text(read(UnitFactionGroup, "player")) }
     -- Session boundaries never infer gains from the offline interval.
     baseline, lastLocation, pendingDeath, lastFatalTimestamp = nil, nil, nil, nil
+    combatFatalHit = nil
     barberSession = nil
     isDead = read(UnitIsDeadOrGhost, "player") == true
     sample()
@@ -317,9 +359,11 @@ local function showExport()
     exportFrame.edit:HighlightText()
     if profile.dropped then print("ChaOS PvP: local retention limit reached; older observations omitted: " .. profile.dropped) end
 end
-frame:SetScript("OnEvent", function(_, name, success)
+frame:SetScript("OnEvent", function(_, name, ...)
     if name == "PLAYER_LOGIN" then initialize(); return end
     if not profile or not db then return end
+    local success = ...
+    if name == "COMBAT_LOG_EVENT_UNFILTERED" then observeCombat(...); return end
     if name == "BARBER_SHOP_OPEN" then
         local session = {}
         barberSession = session
@@ -342,12 +386,11 @@ frame:SetScript("OnEvent", function(_, name, success)
         if location and now() - location.at > 10 then location = nil end
         local death = event("death", 0, context(), location)
         pendingDeath = nil
-        if C_DeathRecap and C_DeathRecap.GetRecapEvents then
-            pendingDeath = death
-            resolveDeath(death, 0)
-        end
+        pendingDeath = death
+        resolveDeath(death, 0)
     elseif name == "PLAYER_ALIVE" or name == "PLAYER_UNGHOST" then
         isDead = read(UnitIsDeadOrGhost, "player") == true
+        if not isDead then combatFatalHit = nil end
     elseif name == "PLAYER_LOGOUT" then
         if pendingDeath then resolveDeath(pendingDeath, #recapRetryDelays) end
         sample(); snapshot(); event("session-end")
@@ -359,6 +402,7 @@ end
 for _, name in ipairs({ "BARBER_SHOP_OPEN", "BARBER_SHOP_CLOSE", "BARBER_SHOP_RESULT", "BARBER_SHOP_FORCE_CUSTOMIZATIONS_UPDATE" }) do
     pcall(frame.RegisterEvent, frame, name)
 end
+pcall(frame.RegisterEvent, frame, "COMBAT_LOG_EVENT_UNFILTERED")
 frame:SetScript("OnUpdate", function(_, delta)
     elapsed = elapsed + delta
     if elapsed < 2 or not db or not profile then return end
@@ -380,7 +424,7 @@ SlashCmdList.CHAOSWORLDPVP = function(message)
         print("ChaOS PvP: appearance choices captured: " .. tostring(appearance and #appearance.choices or 0))
         print("ChaOS PvP " .. ns.version .. ": " .. #profile.events .. " events, " .. #profile.snapshots .. " snapshots.")
         print("HK readable: " .. tostring(number(read(GetPVPLifetimeStats)) ~= nil) .. "; map readable: " .. tostring(position() ~= nil))
-        print("Death recap API: " .. tostring(type(C_DeathRecap and C_DeathRecap.GetRecapEvents) == "function"))
+        print("Death recap API: " .. tostring(type(recapAPI()) == "function") .. "; combat log API: " .. tostring(type(CombatLogGetCurrentEventInfo) == "function"))
         print("Ruleset: " .. profile.ruleset .. "; dropped: " .. tostring(profile.dropped or 0))
     else print("ChaOS PvP: /cvp export | /cvp appearance | /cvp status.") end
 end

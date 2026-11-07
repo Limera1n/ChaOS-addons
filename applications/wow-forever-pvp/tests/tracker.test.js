@@ -8,9 +8,23 @@ import { createTrackerStore } from "../server/store.js";
 import { validateImport } from "../server/import-schema.js";
 import { createLocalServer } from "../server/local-server.js";
 import { API_PATH, IMPORT_TYPE } from "../server/routes.js";
-import { groupZones, honorProgress, itemQuality, summarize } from "../client/model.js";
-import { ARMORY_VIEW_PATH, armoryRace, armoryUrl } from "../client/armory.js";
+import { filterDeaths, groupZones, honorProgress, itemQuality, summarize } from "../client/model.js";
+import { ARMORY_VIEW_PATH, armoryParams, armoryRace } from "../client/armory.js";
+import { selectAppearance } from "../client/armory-viewer.js";
+import { ARMORY_ASSET_PATH, serveArmoryAsset, serveArmoryMetadata } from "../server/armory.js";
 import { AZEROTH, mapContains, projectPosition } from "../client/map-regions.js";
+
+test("death filters preserve honor gains and keep unknown causes separate", () => {
+  const events = [
+    { type: "honor-gain", amount: 3 },
+    ...["pvp", "pve", "environment", "self", "unknown", undefined].map((cause) => ({ type: "death", cause })),
+  ];
+  assert.deepEqual(filterDeaths(events), events);
+  for (const cause of ["pvp", "pve", "environment", "self"])
+    assert.deepEqual(filterDeaths(events, cause), [events[0], events.find((item) => item.cause === cause)]);
+  assert.deepEqual(filterDeaths(events, "unknown"), [events[0], events[5], events[6]]);
+  assert.equal(events.length, 7);
+});
 
 test("Tirisfal positions project through the Eastern Kingdoms to Azeroth", () => {
   const location = { mapId: 1420, x: 0.295, y: 0.652 };
@@ -28,18 +42,67 @@ test("armory keeps legacy race names and uses the dressing room slot order", () 
   assert.equal(armoryRace({ race: "Morte-vivante" }), 5);
   assert.equal(armoryRace({ race: "Skyborne", faction: "Horde" }), 96);
   assert.equal(armoryRace({ raceId: 95 }), 95);
-  const url = armoryUrl(95, 3, [
+  const params = armoryParams(95, 3, [
     { slot: 4, itemId: 4 },
     { slot: 15, itemId: 15 },
     { slot: 16, itemId: 16, link: "|Hitem:16:1900:0|h[Épée]|h" },
     { slot: 19, itemId: 19 },
   ]);
-  assert.deepEqual(Object.fromEntries(url.searchParams), { r: "95", a: "1", g: "d15.f4.g19.q16e1900" });
-  assert.equal(armoryUrl(8, 2, []).searchParams.get("a"), "0b2");
-  assert.equal(armoryUrl(1, 3, [], 5).searchParams.get("a"), "1b5");
+  assert.deepEqual(Object.fromEntries(params), { r: "95", a: "1", g: "d15.f4.g19.q16e1900" });
+  assert.equal(armoryParams(8, 2, []).get("a"), "0");
   const appearance = { raceId: 8, sex: 2, choices: [{ optionId: 31, choiceId: 130 }] };
-  assert.equal(armoryUrl(8, 2, [], 8, appearance).searchParams.get("a"), "0b2.31-130");
-  assert.equal(armoryUrl(8, 3, [], 8, appearance).searchParams.get("a"), "1b2");
+  assert.equal(armoryParams(8, 2, [], appearance).get("a"), "0.31-130");
+  assert.equal(armoryParams(8, 3, [], appearance).get("a"), "1");
+});
+
+test("barber choices translate between HD and SD, including captures made in SD", () => {
+  const hd = { options: [{ id: 11, choices: [{ id: 50 }] }] };
+  const sd = { options: [{ id: 9404, choices: [{ id: 77663 }] }] };
+  const mapping = [{ SourceOptionId: 11, VariantOptionId: 9404, Choices: [{ SourceChoiceId: 50, VariantChoiceId: 77663 }] }];
+  const capturedHd = [{ optionId: 11, choiceId: 50 }];
+  const capturedSd = [{ optionId: 9404, choiceId: 77663 }];
+  assert.deepEqual(selectAppearance(capturedHd, hd, mapping), { options: capturedHd, unmatched: 0 });
+  assert.deepEqual(selectAppearance(capturedHd, sd, mapping), { options: capturedSd, unmatched: 0 });
+  assert.deepEqual(selectAppearance(capturedSd, hd, mapping), { options: capturedHd, unmatched: 0 });
+  assert.deepEqual(selectAppearance(capturedSd, sd, mapping), { options: capturedSd, unmatched: 0 });
+  assert.deepEqual(selectAppearance([{ optionId: 999, choiceId: 1 }], sd, mapping), { options: [], unmatched: 1 });
+});
+
+test("viewer resource relays restrict sources, share requests and recover from failures", async (t) => {
+  let calls = 0;
+  const fetched = [];
+  t.mock.method(globalThis, "fetch", async (url) => {
+    fetched.push(url);
+    calls++;
+    if (calls === 1) return new Response(null, { status: 503 });
+    if (String(url).includes("charactercustomization")) return Response.json({ AltVariant: { Options: [] } });
+    return new Response("texture", { headers: { "Content-Type": "image/avif" } });
+  });
+  const call = async (handler, url) => {
+    const reply = {
+      status: null,
+      headers: {},
+      writeHead(status, headers = {}) {
+        this.status = status;
+        this.headers = headers;
+        return this;
+      },
+      end(body) { this.body = body; },
+    };
+    await handler({ url }, reply);
+    return reply;
+  };
+  assert.equal((await call(serveArmoryAsset, ARMORY_ASSET_PATH + "attacker/own/t/test.avif")).status, 400);
+  assert.equal((await call(serveArmoryMetadata, "/?model=999")).status, 400);
+  assert.equal(calls, 0);
+  assert.equal((await call(serveArmoryMetadata, "/?model=1")).status, 502);
+  assert.equal((await call(serveArmoryMetadata, "/?model=1")).status, 200);
+  const path = ARMORY_ASSET_PATH + "wowbocho-ownf/own/t/test.avif";
+  const replies = await Promise.all([call(serveArmoryAsset, path), call(serveArmoryAsset, path)]);
+  assert.ok(replies.every((reply) => reply.status === 200 && reply.body.toString() === "texture"));
+  assert.equal((await call(serveArmoryAsset, path)).headers["Content-Type"], "image/avif");
+  assert.equal(calls, 3);
+  assert.equal(fetched.at(-1), "https://wowbocho-ownf.pages.dev/own/t/test.avif");
 });
 
 test("equipment metadata survives import and legacy links still supply quality", () => {
@@ -304,12 +367,21 @@ test("local HTTP transport rejects foreign hosts/origins and oversized requests"
   const armory = await fetch(url + ARMORY_VIEW_PATH + "?r=95&a=1&g=a12640.q19019");
   assert.equal((await fetch(url + API_PATH + "/item-tooltip?shard=256")).status, 400);
   assert.equal(armory.status, 200);
-  assert.match(armory.headers.get("content-security-policy"), /frame-src https:\/\/mattjcr\.github\.io\/wowforeverultimatecalculator\/embed\//u);
-  assert.match(await armory.text(), /sandbox="allow-scripts allow-same-origin".*g=a12640\.q19019/u);
+  assert.match(armory.headers.get("content-security-policy"), /script-src 'self' 'unsafe-eval' https:\/\/wowbocho\.com\/tools\/own-viewer\//u);
+  assert.match(await armory.text(), /<script type="module" src="\/api\/wow-forever-pvp\/armory\/viewer\.js"/u);
   assert.equal((await fetch(url + ARMORY_VIEW_PATH + "?r=8&a=0b2")).status, 200);
-  const customArmory = await fetch(url + ARMORY_VIEW_PATH + "?r=8&a=0b2.31-130~33-211");
+  const customArmory = await fetch(url + ARMORY_VIEW_PATH + "?r=8&a=0b2.31-130~33-211&g=a12640");
   assert.equal(customArmory.status, 200);
-  assert.match(await customArmory.text(), /a=0b2\.31-130%7E33-211/u);
+  assert.match(await customArmory.text(), /id="definition"/u);
+  const sdArmory = await fetch(url + ARMORY_VIEW_PATH + "?r=8&a=1b2.31-130&g=b500.k700.q19019e2564&m=sd");
+  assert.equal(sdArmory.status, 200);
+  assert.match(await sdArmory.text(), /<option value="sd">SD<\/option>/u);
+  const viewerScript = await fetch(url + ARMORY_VIEW_PATH + "/viewer.js");
+  assert.equal(viewerScript.status, 200);
+  assert.match(viewerScript.headers.get("content-type"), /text\/javascript/u);
+  assert.equal((await fetch(url + ARMORY_VIEW_PATH + "/metadata?model=999")).status, 400);
+  assert.equal((await fetch(url + ARMORY_VIEW_PATH + "?r=1&a=0&g=b500&m=sd")).status, 200);
+  assert.equal((await fetch(url + ARMORY_VIEW_PATH + "?r=1&a=0&m=other")).status, 400);
   assert.equal((await fetch(url + ARMORY_VIEW_PATH + "?r=8&a=0b2.31-0")).status, 400);
   assert.equal((await fetch(url + ARMORY_VIEW_PATH + "?r=8&a=0b999")).status, 400);
   assert.equal((await fetch(url + ARMORY_VIEW_PATH + "?r=95&a=1&g=%22%3E")).status, 400);

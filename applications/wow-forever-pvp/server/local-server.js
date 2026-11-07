@@ -5,7 +5,7 @@ import { createTrackerStore } from "./store.js";
 import { MAX_IMPORT_BYTES } from "./import-schema.js";
 import { API_PATH, IMPORT_TYPE, importErrorStatus } from "./routes.js";
 import { ARMORY_VIEW_PATH } from "../client/armory.js";
-import { serveArmory } from "./armory.js";
+import { ARMORY_SCRIPT_PATH, ARMORY_METADATA_PATH, ARMORY_ASSET_PATH, serveArmory, serveArmoryScript, serveArmoryMetadata, serveArmoryAsset } from "./armory.js";
 import { ITEM_TOOLTIP_PATH, serveItemTooltips } from "./item-tooltips.js";
 
 // This transport is intentionally local and has no accounts: ChaOS serves the
@@ -52,6 +52,12 @@ export function createLocalServer({
       return reply(403, { error: "Origine refusée." });
     if (request.method === "GET" && request.url.split("?", 1)[0] === ARMORY_VIEW_PATH)
       return serveArmory(request, response);
+    if (request.method === "GET" && request.url.split("?", 1)[0] === ARMORY_SCRIPT_PATH)
+      return serveArmoryScript(request, response);
+    if (request.method === "GET" && request.url.split("?", 1)[0] === ARMORY_METADATA_PATH)
+      return serveArmoryMetadata(request, response);
+    if (request.method === "GET" && request.url.startsWith(ARMORY_ASSET_PATH))
+      return serveArmoryAsset(request, response);
     if (request.method === "GET" && request.url.split("?", 1)[0] === ITEM_TOOLTIP_PATH)
       return serveItemTooltips(request, response);
     if (request.method === "GET" && assets.has(request.url)) {

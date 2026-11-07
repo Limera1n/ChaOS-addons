@@ -1,4 +1,4 @@
-import { groupZones, honorProgress, itemQuality, summarize } from "./model.js";
+import { filterDeaths, groupZones, honorProgress, itemQuality, summarize } from "./model.js";
 import { itemEnchant, mountArmory } from "./armory.js";
 import { AZEROTH, mapContains, mapRegions, projectPosition } from "./map-regions.js";
 import { mapOutlines } from "./map-outlines.js";
@@ -235,13 +235,16 @@ function render() {
   $("#profile").innerHTML =
     `<section class="armory" aria-labelledby="armory-title">
     <img class="armory-backdrop" alt="" referrerpolicy="no-referrer" hidden>
+    <div class="armory-heading">
     <div class="identity">
       <svg class="sigil" viewBox="0 0 96 100" role="img" aria-label="${escape(character.faction ?? "Faction inconnue")}">${factionMark(character.faction?.toLowerCase())}</svg>
-      <h2 id="armory-title">${escape(character.name)}</h2>
-      <div class="armory-identity-meta">
-        <strong>⚔ ${count(latest?.equipment.length ?? 0)} / 19 PIÈCES</strong>
-        <p>${count(character.level)} ${escape(character.race ?? "Race inconnue")} ${escape(character.class ?? "Classe inconnue")}${guild ? ` <span>&lt;${escape(guild)}&gt;</span>` : ""} · ${escape(character.realm)}</p>
+      <div class="armory-identity-copy">
+        <h2 id="armory-title">${escape(character.name)}</h2>
+        <p class="armory-identity-meta">Niveau ${count(character.level)} · ${escape(character.race ?? "Race inconnue")} · ${escape(character.class ?? "Classe inconnue")}</p>
+        <p class="armory-affiliation">${guild ? `&lt;${escape(guild)}&gt; · ` : ""}${escape(character.realm)}</p>
       </div>
+    </div>
+    <span class="armory-equipped">${count(latest?.equipment.length ?? 0)} / 19 pièces équipées</span>
     </div>
     <nav class="armory-tabs" aria-label="Vues de la fiche">
       <button type="button" data-profile-view="character" aria-controls="armory-character">Personnage</button>
@@ -298,6 +301,11 @@ function render() {
     .sort((a, b) => a[1].localeCompare(b[1], "fr"));
   for (const [id, name] of regions) picker.add(new Option(name, id));
   if (!mapNames.has(selectedMap)) selectedMap = AZEROTH;
+  setProfileView(profileView);
+  selectMap(selectedMap);
+}
+function renderZones(events) {
+  const zones = groupZones(events);
   $("#zones").innerHTML = zones.length
     ? zones
         .map(
@@ -305,16 +313,16 @@ function render() {
             `<button type="button" class="zone" data-map="${escape(zone.key)}"><strong>${escape(zone.name)}</strong><span>${count(zone.hk)} VH · ${count(zone.deaths)} mort${zone.deaths === 1 ? "" : "s"}</span></button>`,
         )
         .join("")
-    : '<p class="muted">Aucun événement en monde ouvert collecté.</p>';
-  setProfileView(profileView);
-  selectMap(selectedMap);
+    : '<p class="muted">Aucun événement pour cette sélection.</p>';
 }
 function selectMap(mapId) {
   selectedMap = mapId;
   $("#map-filter").value = mapId;
+  const filtered = filterDeaths(selectedEvents, $("#death-filter").value);
+  renderZones(filtered);
   for (const button of $("#zones").querySelectorAll("[data-map]"))
     button.setAttribute("aria-pressed", String(button.dataset.map === mapId));
-  const events = selectedEvents.filter(
+  const events = filtered.filter(
     (item) =>
       mapId === AZEROTH ||
       mapContains(mapId, String(item.location?.mapId ?? "unknown")),
@@ -411,7 +419,9 @@ function renderMap(events) {
     bindMapTarget(outline, id);
     map.append(outline);
   }
-  for (const { item, x, y } of points) {
+  // SVG paints in DOM order: honor markers must sit above every death cross.
+  const ordered = [...points].sort((a, b) => Number(a.item.type !== "death") - Number(b.item.type !== "death"));
+  for (const { item, x, y } of ordered) {
     const sourceMap = String(item.location.mapId);
     const marker = svgElement("g", { transform: `translate(${x * 150} ${y * 100})` });
     marker.append(svgElement("circle", { class: "map-marker-target", r: 2 }));
@@ -433,6 +443,7 @@ const openImport = () => {
   $("#import-error").textContent = "";
   $("#import-dialog").showModal();
 };
+$("#death-filter").addEventListener("change", () => selectMap(selectedMap));
 $("#open-import").addEventListener("click", openImport);
 $("#empty-import").addEventListener("click", openImport);
 $("#close-import").addEventListener("click", () => $("#import-dialog").close());

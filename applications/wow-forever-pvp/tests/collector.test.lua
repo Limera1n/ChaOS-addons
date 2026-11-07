@@ -133,6 +133,65 @@ recap = { { timestamp = clock + 0.3, overkill = 0, sourceGUID = "Creature-0-3", 
 retry()
 assert(death.cause == "pve" and death.source == "Fatal creature")
 
+-- Forever/Classic may expose combat logs without either recap API.
+C_DeathRecap = nil
+function UnitGUID() return "Player-0-me" end
+local combatArgs
+function CombatLogGetCurrentEventInfo() return table.unpack(combatArgs) end
+local function revive()
+    isPlayerDead = false; fire("PLAYER_ALIVE"); tick(3)
+end
+local function die()
+    isPlayerDead = true; fire("PLAYER_DEAD")
+    return profile.events[#profile.events]
+end
+local function swing(source, flags, overkill, destination)
+    combatArgs = { clock, "SWING_DAMAGE", false, source, "Attacker", flags, 0,
+        destination or "Player-0-me", "Me", 0, 0, 50, overkill }
+    fire("COMBAT_LOG_EVENT_UNFILTERED")
+end
+revive()
+swing("Player-0-enemy", 0x1100, 0)
+assert(die().cause == "pvp", "Combat log must work without death recap")
+revive()
+death = die()
+swing("Creature-0-enemy", 0x2200, 1)
+assert(death.cause == "pve", "A fatal event may arrive after PLAYER_DEAD")
+revive()
+swing("Player-0-enemy", 0x1100, -1)
+death = die()
+assert(death.cause == "unknown", "A nonfatal hit must not be blamed for death")
+revive()
+swing("Player-0-enemy", 0x1100, 0, "Player-0-other")
+assert(die().cause == "unknown", "Other players' deaths must not be attributed")
+revive()
+swing(secret, 0x1100, 0)
+assert(die().cause == "unknown", "Restricted values must be ignored")
+revive()
+swing("Creature-0-enemy", 0x2200, 0)
+tick(4)
+assert(die().cause == "unknown", "Old fatal hits must expire")
+revive()
+combatArgs = { clock, "SPELL_PERIODIC_DAMAGE", false, "Pet-0-enemy", "Pet", 0x1100, 0,
+    "Player-0-me", "Me", 0, 0, 123, "Poison", 8, 50, 0 }
+fire("COMBAT_LOG_EVENT_UNFILTERED")
+assert(die().cause == "pvp")
+revive()
+combatArgs = { clock, "ENVIRONMENTAL_DAMAGE", false, "", "", 0, 0,
+    "Player-0-me", "Me", 0, 0, "FALLING", 50, 0 }
+fire("COMBAT_LOG_EVENT_UNFILTERED")
+assert(die().cause == "environment")
+revive()
+swing("Player-0-me", 0x1101, 0)
+assert(die().cause == "self")
+revive()
+-- The legacy global recap function is supported too.
+DeathRecap_GetEvents = function()
+    return { { timestamp = clock + 0.5, overkill = 0, sourceGUID = "Creature-0-enemy" } }
+end
+assert(die().cause == "pve")
+DeathRecap_GetEvents = nil
+
 fire("BARBER_SHOP_OPEN")
 barberDirty, barberChoice, barberSex = true, 1, 1
 fire("BARBER_SHOP_RESULT", true)

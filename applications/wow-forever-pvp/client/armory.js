@@ -1,4 +1,3 @@
-export const ARMORY_EMBED_URL = "https://mattjcr.github.io/wowforeverultimatecalculator/embed/";
 export const ARMORY_VIEW_PATH = "/api/wow-forever-pvp/armory";
 export const ARMORY_SCENE_URL = "https://mattjcr.github.io/wowforeverultimatecalculator/models/1.60.1.70790/scene/";
 
@@ -18,17 +17,17 @@ const races = [
 ];
 const normalize = (value) =>
   value?.normalize("NFD").replace(/[\p{M}\s-]/gu, "").toLowerCase();
-const elwynn = { id: 1, file: "human", zone: "Forêt d’Elwynn" };
-const durotar = { id: 2, file: "orc", zone: "Durotar" };
-const dunMorogh = { id: 3, file: "dwarf", zone: "Dun Morogh" };
-const zephras = { id: 95, file: "skyborne", zone: "Île de Zephras" };
+const elwynn = { file: "human", zone: "Forêt d’Elwynn" };
+const durotar = { file: "orc", zone: "Durotar" };
+const dunMorogh = { file: "dwarf", zone: "Dun Morogh" };
+const zephras = { file: "skyborne", zone: "Île de Zephras" };
 const startingScenes = new Map([
   [1, elwynn],
   [2, durotar],
   [3, dunMorogh],
-  [4, { id: 4, file: "nightelf", zone: "Teldrassil" }],
-  [5, { id: 5, file: "scourge", zone: "Clairières de Tirisfal" }],
-  [6, { id: 6, file: "tauren", zone: "Mulgore" }],
+  [4, { file: "nightelf", zone: "Teldrassil" }],
+  [5, { file: "scourge", zone: "Clairières de Tirisfal" }],
+  [6, { file: "tauren", zone: "Mulgore" }],
   [7, dunMorogh],
   [8, durotar],
   [95, zephras],
@@ -50,7 +49,7 @@ export function itemEnchant(item) {
   return item.link?.match(/\|Hitem:\d+:([1-9]\d{0,8}):/u)?.[1];
 }
 
-export function armoryUrl(race, sex, equipment, startingRace = race, appearance) {
+export function armoryParams(race, sex, equipment, appearance) {
   const items = new Map(equipment.map((item) => [item.slot, item]));
   const gear = slots.flatMap((slot, index) => {
     const item = items.get(slot);
@@ -58,18 +57,12 @@ export function armoryUrl(race, sex, equipment, startingRace = race, appearance)
     const enchant = itemEnchant(item);
     return [`${"abcdefghijklmnopqrs"[index]}${item.itemId}${enchant ? `e${enchant}` : ""}`];
   });
-  const url = new URL(ARMORY_EMBED_URL);
-  url.searchParams.set("r", race);
-  const scene = startingScenes.get(startingRace);
-  const body = sex === 3 ? "1" : "0";
-  const overrideScene = scene && (startingRace !== race || race === 7 || race === 8);
-  const bodyCode = overrideScene ? `${body}b${scene.id}` : body;
-  const choices = appearance?.raceId === race && appearance.sex === sex
-    ? appearance.choices.map(({ optionId, choiceId }) => `${optionId}-${choiceId}`).join("~")
-    : "";
-  url.searchParams.set("a", choices ? `${bodyCode}.${choices}` : bodyCode);
-  if (gear.length) url.searchParams.set("g", gear.join("."));
-  return url;
+  const params = new URLSearchParams({ r: race, a: sex === 3 ? "1" : "0" });
+  if (appearance?.raceId === race && appearance.sex === sex) {
+    params.set("a", `${params.get("a")}.${appearance.choices.map(({ optionId, choiceId }) => `${optionId}-${choiceId}`).join("~")}`);
+  }
+  if (gear.length) params.set("g", gear.join("."));
+  return params;
 }
 
 export function mountArmory(panel, character, snapshot) {
@@ -79,7 +72,8 @@ export function mountArmory(panel, character, snapshot) {
   const backdrop = panel.querySelector(".armory-backdrop");
   const zone = panel.querySelector(".armory-zone");
   const status = panel.querySelector(".armory-appearance");
-  const form = panel.querySelector("form");
+  const placeholder = stage.querySelector(".armory-placeholder");
+  const form = panel.querySelector(".armory-controls");
   const link = panel.querySelector(".armory-link");
   const raceId = armoryRace(character);
   if (raceId && !races.some(([id]) => id === raceId))
@@ -104,18 +98,23 @@ export function mountArmory(panel, character, snapshot) {
   function loadModel() {
     const modelRace = Number(race.value);
     const modelSex = Number(body.value);
-    const appearance = character.appearance;
-    const personalized = appearance?.raceId === modelRace && appearance.sex === modelSex;
-    const url = armoryUrl(modelRace, modelSex, snapshot?.equipment ?? [], raceId ?? modelRace, appearance);
-    status.textContent = personalized
-      ? "Personnalisation relevée en jeu."
-      : "Modèle générique. Ouvre le barbier en jeu, puis refais un export.";
+    const params = armoryParams(modelRace, modelSex, snapshot?.equipment ?? [], character.appearance);
+    const supported = (modelRace >= 1 && modelRace <= 9) || modelRace === 95 || modelRace === 96;
+    link.hidden = !supported;
+    if (!supported) {
+      status.textContent = "";
+      placeholder.querySelector("p").textContent = "Cette race n’est pas encore prise en charge par le vestiaire 3D.";
+      stage.replaceChildren(placeholder);
+      return;
+    }
+    status.textContent = params.get("a").includes(".")
+      ? "Apparence relevée au barbier."
+      : "Apparence par défaut. Ouvre le barbier en jeu, puis refais un export.";
     const frame = document.createElement("iframe");
     frame.title = `Modèle 3D de ${character.name}`;
     frame.referrerPolicy = "no-referrer";
-    frame.src = ARMORY_VIEW_PATH + url.search;
-    link.href = url;
-    link.hidden = false;
+    frame.src = `${ARMORY_VIEW_PATH}?${params}`;
+    link.href = frame.src;
     stage.replaceChildren(frame);
     form.querySelector("button").textContent = "Actualiser le modèle";
   }

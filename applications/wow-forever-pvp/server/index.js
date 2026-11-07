@@ -9,7 +9,7 @@ import { createTrackerStore } from "./store.js";
 import { MAX_IMPORT_BYTES } from "./import-schema.js";
 import { API_PATH, IMPORT_TYPE, importErrorStatus } from "./routes.js";
 import { ARMORY_VIEW_PATH } from "../client/armory.js";
-import { serveArmory } from "./armory.js";
+import { ARMORY_SCRIPT_PATH, ARMORY_METADATA_PATH, ARMORY_ASSET_PATH, serveArmory, serveArmoryScript, serveArmoryMetadata, serveArmoryAsset } from "./armory.js";
 import { ITEM_TOOLTIP_PATH, serveItemTooltips } from "./item-tooltips.js";
 
 const passThrough = (_request, _response, next) => next();
@@ -23,6 +23,9 @@ export function createWowForeverPvpFeature({
     id: "wowForeverPvp",
     routes(app, { apiLimiter = passThrough } = {}) {
       app.get(ARMORY_VIEW_PATH, apiLimiter, serveArmory);
+      app.get(ARMORY_SCRIPT_PATH, apiLimiter, serveArmoryScript);
+      app.get(ARMORY_METADATA_PATH, apiLimiter, serveArmoryMetadata);
+      app.get(new RegExp(`^${ARMORY_ASSET_PATH}`), serveArmoryAsset);
       app.get(ITEM_TOOLTIP_PATH, apiLimiter, serveItemTooltips);
       app.get(API_PATH + "/state", apiLimiter, (_request, response) => {
         response.json(openStore().read());

@@ -22,13 +22,18 @@ s'ouvre dans sa propre fenêtre du bureau (`client/index.html`).
 ### Portrait 3D
 
 La fiche joueur place le modèle 3D entre les emplacements d’équipement.
-Le décor suit la zone de départ de la race, même lorsque le personnage a
-été observé ailleurs. Si la race et la silhouette sont disponibles, le
-vestiaire s’ouvre automatiquement avec les pièces du dernier relevé.
+Le décor de la fiche suit la zone de départ de la race. Le moteur WoWBocho
+affiche la race, la silhouette, les choix du barbier et l’équipement du
+dernier relevé. Le modèle SD est sélectionné par défaut lorsqu’il est disponible.
+Le sélecteur HD/SD se trouve en haut de l’aperçu et conserve
+les choix qui ont un équivalent dans l’autre modèle. Une indication signale
+les choix ou les objets indisponibles. Les Skyborne sont disponibles en HD.
 Les anciens relevés peuvent utiliser les sélecteurs manuels. La visionneuse
-demande un navigateur compatible WebGL 2 et un accès au vestiaire externe.
+demande WebGL 2 et un accès aux ressources externes de WoWBocho et Wowhead.
+Le serveur relaie les fichiers des modèles et les correspondances HD/SD,
+avec un cache mémoire limité à 64 Mio pour les fichiers des modèles.
 
-Avec le collecteur 0.5.2, ouvre le salon du barbier en jeu pour relever
+Avec le collecteur 0.5.3, ouvre le salon du barbier en jeu pour relever
 les choix actuels du personnage, comme la coiffure, les couleurs, le
 visage et les détails propres à sa race. Tu peux fermer le salon sans rien
 acheter, puis lancer `/cvp export` et importer le relevé dans ChaOS.
@@ -81,7 +86,7 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.2.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.3.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
@@ -136,8 +141,12 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
 
 - L'addon doit d'abord être validé **en jeu**. Les tests Lua simulés ne prouvent
   pas le comportement de Forever, de ses restrictions ou de son interface.
-- Les morts importées avant la 0.5 et celles dont le coup fatal est illisible
-  restent de cause inconnue. La catégorie décrit la source du coup fatal.
+- La collecte des causes utilise les coups fatals du journal de combat et le
+  récapitulatif de mort (API actuelle ou historique). Les anciennes morts sans
+  source et celles dont le coup fatal est illisible restent de cause inconnue.
+  La catégorie décrit la source du coup fatal. Le filtre des morts agit sur
+  la carte, le journal et la répartition par zone ; les VH restent affichées
+  au-dessus des croix, quelle que soit la cause sélectionnée.
 - Les fonds proviennent du build 1.60.1.69893. Une grille prend le relais si
   le fond de la carte sélectionnée ne se charge pas.
 - Les VH incluent les participations en groupe : aucun compteur de coups fatals.
@@ -158,8 +167,9 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
 - Limite serveur de 100 000 événements/relevés. La sauvegarde du prototype est
   prévue pour un seul processus ; ne pas lancer plusieurs instances sur le même
   fichier. Pas de fusion automatique de plusieurs installations d'un personnage.
-- Le portrait 3D affiche les choix reconnus par le vestiaire pour son modèle
-  de race et de silhouette. Les pièces gardent leurs textures de base.
+- Le portrait reprend les choix capturés au barbier et reconnus par le modèle.
+  Les choix sans équivalent HD/SD et les objets sans modèle sont signalés.
+  Un relevé sans capture du barbier utilise l’apparence par défaut.
 - Honneur, rang, points de rang, talents et adversaires des VH restent à
   implémenter après vérification des API et sources de ressources.
 

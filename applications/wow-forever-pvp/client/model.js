@@ -33,6 +33,10 @@ export function summarize(character) {
   };
 }
 
+export function filterDeaths(events, cause = "all") {
+  return events.filter((item) => item.type !== "death" || cause === "all" || (item.cause ?? "unknown") === cause);
+}
+
 export function groupZones(events) {
   const zones = new Map();
   for (const event of events) {
