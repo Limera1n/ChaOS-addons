@@ -1,9 +1,9 @@
 local ns = ChaOSWorldPvP
 local frame = CreateFrame("Frame")
 local db, profile, baseline, lastLocation, exportFrame
+local honorBaseline
 local isDead, elapsed = false, 0
 local pendingDeath, lastFatalTimestamp
-local combatFatalHit
 local recapRetryDelays = { 0.3, 0.7, 1 }
 
 -- Secret values are discarded before any comparison, conversion or persistence.
@@ -19,6 +19,15 @@ local function number(value)
 end
 local function text(value)
     if type(value) == "string" and #value > 0 then return value end
+end
+local function honorPoints()
+    -- CurrencyConsts.HONOR_CURRENCY_ID in the Forever API, not lifetime HK.
+    return read(function()
+        local currencyId = Constants and Constants.CurrencyConsts and Constants.CurrencyConsts.HONOR_CURRENCY_ID or 1792
+        local info = read(C_CurrencyInfo and C_CurrencyInfo.GetCurrencyInfo, currencyId)
+        local quantity = info and number(read(function() return info.quantity end))
+        if quantity and quantity % 1 == 0 and quantity <= 100000000 then return quantity end
+    end)
 end
 local function now() return read(GetServerTime) or time() end
 local function nextId()
@@ -88,9 +97,6 @@ local function recapAPI()
     return C_DeathRecap and C_DeathRecap.GetRecapEvents or DeathRecap_GetEvents
 end
 local function fatalHit(death)
-    if combatFatalHit and math.abs(combatFatalHit.at - death.at) <= 2 then
-        return combatFatalHit.timestamp, combatFatalHit.cause, combatFatalHit.source
-    end
     local entries = read(recapAPI())
     if type(entries) ~= "table" then return nil end
     local hit, latest
@@ -116,42 +122,11 @@ local function resolveDeath(death, attempt)
     if cause then
         death.cause, death.source = cause, source
         lastFatalTimestamp = stamp
-        combatFatalHit = nil
     elseif recapRetryDelays[attempt + 1] and C_Timer and C_Timer.After then
         C_Timer.After(recapRetryDelays[attempt + 1], function() resolveDeath(death, attempt + 1) end)
         return
     end
     pendingDeath = nil
-end
-local function observeCombat(...)
-    local args = { ... }
-    -- Read and classify inside pcall: restricted combat values must never escape.
-    local hit = read(function()
-        if type(CombatLogGetCurrentEventInfo) == "function" then
-            args = { CombatLogGetCurrentEventInfo() }
-        end
-        for _, value in pairs(args) do
-            if issecretvalue and issecretvalue(value) then return nil end
-        end
-        local kind, destination = args[2], args[8]
-        local playerGUID = text(read(UnitGUID, "player"))
-        if not playerGUID or destination ~= playerGUID then return nil end
-        local overkill
-        if kind == "SWING_DAMAGE" then overkill = args[13]
-        elseif kind == "ENVIRONMENTAL_DAMAGE" then overkill = args[14]
-        elseif kind == "SPELL_DAMAGE" or kind == "SPELL_PERIODIC_DAMAGE"
-            or kind == "RANGE_DAMAGE" or kind == "DAMAGE_SHIELD"
-            or kind == "DAMAGE_SPLIT" or kind == "SPELL_BUILDING_DAMAGE" then overkill = args[16]
-        else return nil end
-        if not number(overkill) then return nil end
-        local cause, source = classifyHit({ event = kind, sourceGUID = args[4],
-            sourceName = args[5], sourceFlags = args[6] })
-        if cause then return { at = now(), timestamp = now(), cause = cause, source = source } end
-    end)
-    if hit then
-        combatFatalHit = hit
-        if pendingDeath then resolveDeath(pendingDeath, 0) end
-    end
 end
 local function tooltipText(value)
     value = text(value)
@@ -265,6 +240,7 @@ local function snapshot()
     end
     append("snapshots", {
         id = nextId(), at = now(), lifetimeHK = number(read(GetPVPLifetimeStats)),
+        honorPoints = honorPoints(),
         guild = text(read(GetGuildInfo, "player")), equipment = equipment(),
     }, 300)
 end
@@ -283,6 +259,16 @@ local function sample()
         elseif difference < 0 then event("counter-reset", 0, currentContext) end
     end
     baseline = { value = current, at = at, context = currentContext, mapId = location and location.mapId }
+    local honor = honorPoints()
+    if honor ~= nil and honorBaseline and honorBaseline.value ~= nil then
+        local difference = honor - honorBaseline.value
+        if difference ~= 0 then
+            local isContinuous = at - honorBaseline.at <= 5 and currentContext == honorBaseline.context
+            event(difference > 0 and "honor-points-gain" or "honor-points-loss", math.abs(difference),
+                isContinuous and currentContext or "unknown")
+        end
+    end
+    honorBaseline = { value = honor, at = at, context = currentContext }
     -- Do not replace the death position with the spirit healer's position.
     if location and not isDead then
         if location.x then lastLocation = location
@@ -310,7 +296,7 @@ local function initialize()
         class = text(read(UnitClass, "player")), faction = text(read(UnitFactionGroup, "player")) }
     -- Session boundaries never infer gains from the offline interval.
     baseline, lastLocation, pendingDeath, lastFatalTimestamp = nil, nil, nil, nil
-    combatFatalHit = nil
+    honorBaseline = nil
     barberSession = nil
     isDead = read(UnitIsDeadOrGhost, "player") == true
     sample()
@@ -363,8 +349,9 @@ frame:SetScript("OnEvent", function(_, name, ...)
     if name == "PLAYER_LOGIN" then initialize(); return end
     if not profile or not db then return end
     local success = ...
-    if name == "COMBAT_LOG_EVENT_UNFILTERED" then observeCombat(...); return end
-    if name == "BARBER_SHOP_OPEN" then
+    if name == "CURRENCY_DISPLAY_UPDATE" then
+        sample()
+    elseif name == "BARBER_SHOP_OPEN" then
         local session = {}
         barberSession = session
         if not captureAppearance() and C_Timer and C_Timer.After then
@@ -390,7 +377,6 @@ frame:SetScript("OnEvent", function(_, name, ...)
         resolveDeath(death, 0)
     elseif name == "PLAYER_ALIVE" or name == "PLAYER_UNGHOST" then
         isDead = read(UnitIsDeadOrGhost, "player") == true
-        if not isDead then combatFatalHit = nil end
     elseif name == "PLAYER_LOGOUT" then
         if pendingDeath then resolveDeath(pendingDeath, #recapRetryDelays) end
         sample(); snapshot(); event("session-end")
@@ -402,7 +388,9 @@ end
 for _, name in ipairs({ "BARBER_SHOP_OPEN", "BARBER_SHOP_CLOSE", "BARBER_SHOP_RESULT", "BARBER_SHOP_FORCE_CUSTOMIZATIONS_UPDATE" }) do
     pcall(frame.RegisterEvent, frame, name)
 end
-pcall(frame.RegisterEvent, frame, "COMBAT_LOG_EVENT_UNFILTERED")
+frame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
+-- Forever blocks combat-log event registration. pcall cannot prevent the
+-- protected-action warning, so use the death recap without probing this event.
 frame:SetScript("OnUpdate", function(_, delta)
     elapsed = elapsed + delta
     if elapsed < 2 or not db or not profile then return end
@@ -410,21 +398,35 @@ frame:SetScript("OnUpdate", function(_, delta)
     sample()
 end)
 SLASH_CHAOSWORLDPVP1 = "/cvp"
+local function showHonor()
+    sample()
+    local gained, lost = 0, 0
+    for _, item in ipairs(profile.events) do
+        if item.type == "honor-points-gain" then gained = gained + item.amount end
+        if item.type == "honor-points-loss" then lost = lost + item.amount end
+    end
+    local points = honorPoints()
+    print("ChaOS PvP: honneur disponible : " .. (points ~= nil and tostring(points) or "illisible")
+        .. "; gains observes : " .. gained .. "; baisses observees : " .. lost .. " (historique local conserve).")
+end
 SlashCmdList.CHAOSWORLDPVP = function(message)
     if not profile or not db then print("ChaOS PvP: collector unavailable."); return end
     if message == "export" then
         if pendingDeath then print("ChaOS PvP: death recap pending. Try /cvp export in two seconds."); return end
         sample(); showExport()
+    elseif message == "honor" then
+        showHonor()
     elseif message == "appearance" then
         if captureAppearance() then print("ChaOS PvP: appearance captured. Use /cvp export.")
         elseif profile.appearance then print("ChaOS PvP: saved appearance available. Reopen the barber shop to refresh it.")
         else print("ChaOS PvP: open the barber shop to capture your appearance without changing it.") end
     elseif message == "status" then
+        showHonor()
         local appearance = profile.appearance
         print("ChaOS PvP: appearance choices captured: " .. tostring(appearance and #appearance.choices or 0))
         print("ChaOS PvP " .. ns.version .. ": " .. #profile.events .. " events, " .. #profile.snapshots .. " snapshots.")
         print("HK readable: " .. tostring(number(read(GetPVPLifetimeStats)) ~= nil) .. "; map readable: " .. tostring(position() ~= nil))
-        print("Death recap API: " .. tostring(type(recapAPI()) == "function") .. "; combat log API: " .. tostring(type(CombatLogGetCurrentEventInfo) == "function"))
+        print("Death recap API: " .. tostring(type(recapAPI()) == "function") .. "; combat log: disabled (Forever restriction)")
         print("Ruleset: " .. profile.ruleset .. "; dropped: " .. tostring(profile.dropped or 0))
-    else print("ChaOS PvP: /cvp export | /cvp appearance | /cvp status.") end
+    else print("ChaOS PvP: /cvp export | /cvp honor | /cvp appearance | /cvp status.") end
 end

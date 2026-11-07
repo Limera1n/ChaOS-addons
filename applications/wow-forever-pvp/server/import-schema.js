@@ -115,6 +115,7 @@ export function validateImport(input) {
     ...identity(item),
     lifetimeHK:
       item.lifetimeHK == null ? null : integer(item.lifetimeHK, 1000000000),
+    ...(item.honorPoints == null ? {} : { honorPoints: integer(item.honorPoints, 100000000) }),
     guild: optionalString(item.guild),
     equipment: list(item.equipment, 19).map((slot) => {
       record(slot);
@@ -149,13 +150,16 @@ export function validateImport(input) {
       fail();
     const type = oneOf(item.type, [
       "honor-gain",
+      "honor-points-gain",
+      "honor-points-loss",
       "death",
       "session-start",
       "session-end",
       "counter-reset",
     ]);
-    const amount = integer(item.amount, 1000000);
-    if (type === "honor-gain" ? amount < 1 : amount !== 0) fail();
+    const isHonorPoints = type === "honor-points-gain" || type === "honor-points-loss";
+    const amount = integer(item.amount, isHonorPoints ? 100000000 : 1000000);
+    if (type === "honor-gain" || isHonorPoints ? amount < 1 : amount !== 0) fail();
     const cause = type === "death"
       ? oneOf(item.cause ?? "unknown", ["unknown", "pvp", "pve", "environment", "self"])
       : "unknown";

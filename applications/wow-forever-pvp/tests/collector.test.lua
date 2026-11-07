@@ -4,8 +4,15 @@ local isPlayerDead = false
 local playerSex = 2
 local barberSex, barberChoice, barberDirty = 0, 2, false
 local frames = {}
+local combatLogRegistrations = 0
 local function widget()
     local value = { scripts = {} }
+    function value:RegisterEvent(name)
+        if name == "COMBAT_LOG_EVENT_UNFILTERED" then
+            combatLogRegistrations = combatLogRegistrations + 1
+            error("Protected event registration")
+        end
+    end
     setmetatable(value, { __index = function(_, name)
         if name == "SetScript" then return function(self, event, callback) self.scripts[event] = callback end end
         if name == "SetText" then return function(self, text) self.text = text end end
@@ -51,6 +58,11 @@ function GetBuildInfo() return "1.60.1", "test-build" end
 function IsInInstance() return instance ~= "none", instance end
 local secret = {}
 function issecretvalue(value) return value == secret end
+local honor = 100
+C_CurrencyInfo = { GetCurrencyInfo = function(id)
+    assert(id == 1792)
+    return { quantity = honor }
+end }
 C_Map = {
     GetBestMapForUnit = function() return 37 end,
     GetPlayerMapPosition = function()
@@ -133,11 +145,10 @@ recap = { { timestamp = clock + 0.3, overkill = 0, sourceGUID = "Creature-0-3", 
 retry()
 assert(death.cause == "pve" and death.source == "Fatal creature")
 
--- Forever/Classic may expose combat logs without either recap API.
+-- The presence of the API does not mean event registration is permitted.
+assert(combatLogRegistrations == 0, "Do not probe the protected combat-log event, even inside pcall")
 C_DeathRecap = nil
-function UnitGUID() return "Player-0-me" end
-local combatArgs
-function CombatLogGetCurrentEventInfo() return table.unpack(combatArgs) end
+function CombatLogGetCurrentEventInfo() error("Combat log must not be queried") end
 local function revive()
     isPlayerDead = false; fire("PLAYER_ALIVE"); tick(3)
 end
@@ -145,45 +156,11 @@ local function die()
     isPlayerDead = true; fire("PLAYER_DEAD")
     return profile.events[#profile.events]
 end
-local function swing(source, flags, overkill, destination)
-    combatArgs = { clock, "SWING_DAMAGE", false, source, "Attacker", flags, 0,
-        destination or "Player-0-me", "Me", 0, 0, 50, overkill }
-    fire("COMBAT_LOG_EVENT_UNFILTERED")
-end
-revive()
-swing("Player-0-enemy", 0x1100, 0)
-assert(die().cause == "pvp", "Combat log must work without death recap")
 revive()
 death = die()
-swing("Creature-0-enemy", 0x2200, 1)
-assert(death.cause == "pve", "A fatal event may arrive after PLAYER_DEAD")
-revive()
-swing("Player-0-enemy", 0x1100, -1)
-death = die()
-assert(death.cause == "unknown", "A nonfatal hit must not be blamed for death")
-revive()
-swing("Player-0-enemy", 0x1100, 0, "Player-0-other")
-assert(die().cause == "unknown", "Other players' deaths must not be attributed")
-revive()
-swing(secret, 0x1100, 0)
-assert(die().cause == "unknown", "Restricted values must be ignored")
-revive()
-swing("Creature-0-enemy", 0x2200, 0)
-tick(4)
-assert(die().cause == "unknown", "Old fatal hits must expire")
-revive()
-combatArgs = { clock, "SPELL_PERIODIC_DAMAGE", false, "Pet-0-enemy", "Pet", 0x1100, 0,
-    "Player-0-me", "Me", 0, 0, 123, "Poison", 8, 50, 0 }
-fire("COMBAT_LOG_EVENT_UNFILTERED")
-assert(die().cause == "pvp")
-revive()
-combatArgs = { clock, "ENVIRONMENTAL_DAMAGE", false, "", "", 0, 0,
-    "Player-0-me", "Me", 0, 0, "FALLING", 50, 0 }
-fire("COMBAT_LOG_EVENT_UNFILTERED")
-assert(die().cause == "environment")
-revive()
-swing("Player-0-me", 0x1101, 0)
-assert(die().cause == "self")
+for _ = 1, 3 do retry() end
+assert(death.cause == "unknown" and not death.source, "Missing recap must leave cause unknown")
+SlashCmdList.CHAOSWORLDPVP("status")
 revive()
 -- The legacy global recap function is supported too.
 DeathRecap_GetEvents = function()
@@ -191,6 +168,36 @@ DeathRecap_GetEvents = function()
 end
 assert(die().cause == "pve")
 DeathRecap_GetEvents = nil
+
+-- Honor is a separate currency: do not count points as honorable kills.
+local honorStart, hkBeforeHonor = #profile.events, hk
+honor = 125; fire("CURRENCY_DISPLAY_UPDATE", 1792)
+assert(#profile.events == honorStart + 1)
+assert(profile.events[#profile.events].type == "honor-points-gain" and profile.events[#profile.events].amount == 25)
+tick(2)
+assert(#profile.events == honorStart + 1, "Polling must not duplicate the currency event")
+honor = 0; fire("CURRENCY_DISPLAY_UPDATE", 1792)
+assert(profile.events[#profile.events].type == "honor-points-loss" and profile.events[#profile.events].amount == 125)
+honor = 10; tick(2)
+assert(profile.events[#profile.events].type == "honor-points-gain" and profile.events[#profile.events].amount == 10)
+assert(hk == hkBeforeHonor)
+local beforeUnavailable = #profile.events
+honor = secret; tick(2)
+honor = 500; tick(2)
+assert(#profile.events == beforeUnavailable, "Do not infer honor across unreadable intervals")
+honor = 510; tick(10)
+assert(profile.events[#profile.events].context == "unknown", "A long interval cannot locate the honor gain")
+local beforeReconnect = #profile.events
+honor = 900; fire("PLAYER_LOGIN")
+assert(#profile.events == beforeReconnect + 1, "Offline honor is not an observed gain")
+SlashCmdList.CHAOSWORLDPVP("honor")
+assert(profile.snapshots[#profile.snapshots].honorPoints == 900)
+local beforeMissingAPI = #profile.events
+C_CurrencyInfo = nil; tick(2)
+assert(#profile.events == beforeMissingAPI)
+C_CurrencyInfo = { GetCurrencyInfo = function() return { quantity = 0 } end }
+tick(2)
+assert(#profile.events == beforeMissingAPI, "Restoring the API must not create an honor loss")
 
 fire("BARBER_SHOP_OPEN")
 barberDirty, barberChoice, barberSex = true, 1, 1
@@ -212,6 +219,7 @@ for _, value in ipairs(frames) do
 end
 assert(type(payload) == "string" and payload:find('"format":"chaos%-world%-pvp"'))
 assert(payload:find('"equipment":%['))
+assert(payload:find('"honorPoints":0') and payload:find('"honor%-points%-gain"'))
 assert(payload:find('"raceId":1') and payload:find('"sex":3'))
 assert(payload:find('"appearance":') and payload:find('"choiceId":120'))
 assert(payload:find('"icon":133138') and payload:find('"quality":4'))

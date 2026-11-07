@@ -11,6 +11,11 @@ Ajouter le dépôt qui contient ce paquet dans le panneau admin (onglet
 Add-ons), installer « WoW Forever PvP » puis redémarrer le site. L'application
 s'ouvre dans sa propre fenêtre du bureau (`client/index.html`).
 
+Les mouvements et appuis de souris sont relayés vers le bureau ChaOS pour
+que les curseurs partagés suivent aussi l'intérieur de l'application et du
+portrait 3D. Le relais utilise uniquement les iframes de même origine et
+convertit les coordonnées selon leur position et leur échelle.
+
 - Tout le monde consulte le carnet ; seul un compte ChaOS connecté peut
   importer un relevé, et uniquement depuis le site (`server/index.js`).
 - Les relevés sont stockés dans `addons/applications/wow-forever-pvp/data/tracker.json` sur le
@@ -33,7 +38,7 @@ demande WebGL 2 et un accès aux ressources externes de WoWBocho et Wowhead.
 Le serveur relaie les fichiers des modèles et les correspondances HD/SD,
 avec un cache mémoire limité à 64 Mio pour les fichiers des modèles.
 
-Avec le collecteur 0.5.3, ouvre le salon du barbier en jeu pour relever
+Avec le collecteur 0.5.5, ouvre le salon du barbier en jeu pour relever
 les choix actuels du personnage, comme la coiffure, les couleurs, le
 visage et les détails propres à sa race. Tu peux fermer le salon sans rien
 acheter, puis lancer `/cvp export` et importer le relevé dans ChaOS.
@@ -80,15 +85,53 @@ usage partagé, passer par ChaOS et ses comptes.
    comptés deux fois. Chaque ami peut transmettre son export à la personne qui
    héberge ce prototype local ; il n'y a pas encore de synchronisation réseau.
 
+### Points d’honneur (collecteur 0.5.5)
+
+`/cvp honor` affiche le solde d’honneur disponible ainsi que les gains et les
+baisses observés dans l’historique local conservé. `/cvp status` affiche aussi
+le solde. La collecte lit `C_CurrencyInfo.GetCurrencyInfo` pour la monnaie
+`Constants.CurrencyConsts.HONOR_CURRENCY_ID` (1792), documentée dans les
+[constantes du client Forever](https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/CurrencyConstantsDocumentation.lua).
+Elle se rafraîchit aux mises à jour de monnaie et toutes les deux secondes.
+
+Après `/cvp export`, importer le relevé sur le site : l’onglet « Joueur contre
+joueur » affiche le solde daté, les points gagnés, les baisses du solde et les
+20 dernières variations. Les totaux portent sur tous les contextes ; un compteur
+isole les gains observés en monde ouvert. Une baisse peut être un achat ou une
+remise à zéro, sans déduire sa cause. Les VH restent un compteur distinct.
+
+Une lecture absente ou protégée reste inconnue ; zéro est un solde valide.
+Les variations hors ligne et celles traversant une période illisible ne sont
+pas reconstituées. Plusieurs opérations entre deux lectures peuvent n’être
+visibles que par leur différence nette. Les anciens exports restent importables
+mais n’inventent pas d’historique d’honneur. Mettre à jour le site et le collecteur
+ensemble pour que l’import reconnaisse les nouveaux événements.
+
 Le `.toc` cible l'interface `16001`, identifiée pendant la recherche. Vérifier
 la version du client avant de considérer l'addon compatible. Les API absentes
 ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.3.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.5.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
+
+## Diagnostiquer une action bloquée en jeu
+
+Avant de reproduire le problème, cette commande affiche dans le chat le nom
+de l'événement, l'addon signalé et la fonction protégée :
+
+```text
+/run local f=CreateFrame("Frame");f:RegisterEvent("ADDON_ACTION_BLOCKED");f:RegisterEvent("ADDON_ACTION_FORBIDDEN");f:SetScript("OnEvent",function(_,e,a,b) print(e,a,b) end)
+```
+
+Un `/reload` retire cet écouteur temporaire. Pour obtenir le chemin de
+contamination de l'interface, activer `/console taintLog 1`, redémarrer le jeu,
+reproduire le blocage puis quitter le jeu. Chercher `blocked` dans
+`Logs/taint.log` du client Forever. Désactiver ensuite avec
+`/console taintLog 0`. L'addon nommé dans l'alerte ne suffit pas à identifier
+l'origine de la contamination.
 
 ## Publier le paquet
 
@@ -141,8 +184,10 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
 
 - L'addon doit d'abord être validé **en jeu**. Les tests Lua simulés ne prouvent
   pas le comportement de Forever, de ses restrictions ou de son interface.
-- La collecte des causes utilise les coups fatals du journal de combat et le
-  récapitulatif de mort (API actuelle ou historique). Les anciennes morts sans
+- Depuis le collecteur 0.5.4, l'abonnement au journal de combat est retiré :
+  le client Forever a bloqué son enregistrement comme action protégée.
+  La collecte des causes utilise le récapitulatif de mort (API actuelle ou
+  historique). Sans récapitulatif lisible, la cause reste inconnue. Les anciennes morts sans
   source et celles dont le coup fatal est illisible restent de cause inconnue.
   La catégorie décrit la source du coup fatal. Le filtre des morts agit sur
   la carte, le journal et la répartition par zone ; les VH restent affichées
@@ -170,7 +215,7 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
 - Le portrait reprend les choix capturés au barbier et reconnus par le modèle.
   Les choix sans équivalent HD/SD et les objets sans modèle sont signalés.
   Un relevé sans capture du barbier utilise l’apparence par défaut.
-- Honneur, rang, points de rang, talents et adversaires des VH restent à
+- Rang, points de rang, talents et adversaires des VH restent à
   implémenter après vérification des API et sources de ressources.
 
 ## Vérifier

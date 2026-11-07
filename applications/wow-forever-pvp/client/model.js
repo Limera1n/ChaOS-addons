@@ -5,8 +5,18 @@ export function summarize(character) {
     (item) => item.lifetimeHK != null,
   );
   const world = character.events.filter((item) => item.context === "world");
+  const lastHonor = character.snapshots.findLast((item) => item.honorPoints != null);
+  const honorEvents = character.events.filter((item) =>
+    item.type === "honor-points-gain" || item.type === "honor-points-loss");
+  const honorKnown = lastHonor != null || honorEvents.length > 0;
   return {
     latest,
+    honorPoints: lastHonor?.honorPoints ?? null,
+    honorAt: lastHonor?.at ?? null,
+    honorGained: honorKnown ? honorEvents.reduce((sum, item) => sum + (item.type === "honor-points-gain" ? item.amount : 0), 0) : null,
+    honorLost: honorKnown ? honorEvents.reduce((sum, item) => sum + (item.type === "honor-points-loss" ? item.amount : 0), 0) : null,
+    worldHonor: honorKnown ? honorEvents.reduce((sum, item) => sum + (item.type === "honor-points-gain" && item.context === "world" ? item.amount : 0), 0) : null,
+    honorEvents,
     lifetimeHK: lastKnown?.lifetimeHK ?? null,
     counterAt: lastKnown?.at ?? null,
     delta:

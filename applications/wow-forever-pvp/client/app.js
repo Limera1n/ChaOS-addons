@@ -3,6 +3,9 @@ import { itemEnchant, mountArmory } from "./armory.js";
 import { AZEROTH, mapContains, mapRegions, projectPosition } from "./map-regions.js";
 import { mapOutlines } from "./map-outlines.js";
 import { bindEquipmentTooltips, hideEquipmentTooltip } from "./item-tooltips.js";
+import { installDesktopCursor } from "./desktop-cursor.js";
+
+installDesktopCursor();
 
 // Same paths as server/routes.js; the client cannot import server code.
 const API_PATH = "/api/wow-forever-pvp";
@@ -252,6 +255,19 @@ function render() {
     </nav>
     ${armoryEquipment(latest)}
     <div id="armory-pvp" hidden>
+    <section aria-labelledby="honor-points-title">
+      <h3 id="honor-points-title">Points d’honneur</h3>
+      <div class="metrics">
+        <div class="metric"><strong>${count(summary.honorPoints)}</strong><span>Solde disponible</span></div>
+        <div class="metric"><strong>${count(summary.honorGained)}</strong><span>Points gagnés · observés</span></div>
+        <div class="metric"><strong>${count(summary.honorLost)}</strong><span>Baisses du solde · observées</span></div>
+        <div class="metric"><strong>${count(summary.worldHonor)}</strong><span>Points gagnés · monde ouvert</span></div>
+      </div>
+      <p class="muted">${summary.honorAt == null ? "Solde non relevé : installe le collecteur 0.5.5 puis importe un nouvel export." : `Solde relevé le ${escape(date(summary.honorAt))}.`} Les variations observées incluent tous les contextes. Une baisse peut correspondre à un achat ou à une remise à zéro. Les variations hors ligne ne sont pas comptées.</p>
+      <details><summary>Historique des points d’honneur</summary>
+        <ul>${summary.honorEvents.length ? summary.honorEvents.slice(-20).reverse().map((item) => `<li>${escape(date(item.at))} · ${item.type === "honor-points-gain" ? "+" : "−"}${count(item.amount)} points · ${escape(({world: "monde ouvert", pvp: "champ de bataille", arena: "arène", instance: "instance", unknown: "contexte inconnu"})[item.context])}</li>`).join("") : "<li>Aucune variation observée.</li>"}</ul>
+      </details>
+    </section>
     <div class="metrics"><div class="metric"><strong>${count(summary.lifetimeHK)}</strong><span>VH cumulées · tous contextes</span></div><div class="metric"><strong>${count(summary.worldHK)}</strong><span>VH observées · monde ouvert</span></div><div class="metric"><strong>${count(summary.deaths)}</strong><span>Morts observées · monde ouvert</span></div><div class="metric"><strong>${summary.delta == null ? "—" : "+" + count(summary.delta)}</strong><span>Écart du compteur · tous contextes</span></div></div>
     <p class="muted">Compteur relevé le ${escape(date(summary.counterAt))}. Dernier import le ${escape(date(character.lastImportedAt))}. Règles de jeu ${escape(character.ruleset === "unknown" ? "non renseignées" : character.ruleset)}.</p>
     <section class="honor-progress" aria-labelledby="honor-title">
