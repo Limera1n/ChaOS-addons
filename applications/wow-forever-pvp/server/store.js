@@ -26,6 +26,7 @@ function fillSnapshotMetadata(item, other) {
   return {
     ...item,
     equipment: fillEquipmentMetadata(item.equipment, other.equipment),
+    ...(item.guildKnown == null && other.guildKnown != null ? { guildKnown: other.guildKnown } : {}),
     ...(item.playedSeconds == null && other.playedSeconds != null
       ? { playedSeconds: other.playedSeconds, playedAt: other.playedAt } : {}),
   };
@@ -39,6 +40,7 @@ function reconcileObservation(previous, candidate, kind) {
     const incoming = fillSnapshotMetadata(candidate, previous);
     if (isDeepStrictEqual(enriched, incoming)) {
       return { ...previous, equipment: enriched.equipment,
+        ...(enriched.guildKnown == null ? {} : { guildKnown: enriched.guildKnown }),
         ...(enriched.playedSeconds == null ? {} : { playedSeconds: enriched.playedSeconds, playedAt: enriched.playedAt }) };
     }
   }

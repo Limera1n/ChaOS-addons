@@ -136,7 +136,7 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.10.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.11.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
@@ -211,6 +211,18 @@ conservent que les indices correspondants, y compris pour les VH et les
 participants d’une session sur plusieurs jours ou zones.
 Il s’agit d’une inférence, pas d’une preuve d’appartenance au groupe ou de
 victimes uniques. Les douze sessions les plus récentes sont détaillées.
+
+Les anciens collecteurs pouvaient exporter une guilde vide à la connexion
+avant le chargement de ses informations. Depuis **0.5.11**, les rapprochements
+probables peuvent utiliser un relevé ancien ultérieur de la même session pour
+compléter cette lecture manquante. La fiche indique les membres dont la guilde
+est déduite. Une coupure de session, un changement de source, une absence de
+guilde confirmée ou un relevé ultérieur explicitement confirmé empêchent cette
+déduction. Les événements avant le premier relevé ne sont pas complétés.
+Les historiques et les compteurs de guilde confirmés ne sont pas réécrits.
+Les nouveaux relevés exportent `guildKnown` quand la présence ou l’absence
+de guilde est connue, afin de distinguer une lecture manquante d’un joueur
+réellement sans guilde.
 
 ### Pourquoi les exports contiennent un historique
 

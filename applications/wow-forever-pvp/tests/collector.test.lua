@@ -97,6 +97,7 @@ local profile = currentProfile()
 fire("BARBER_SHOP_OPEN")
 assert(profile.appearance.sex == 2 and #profile.appearance.choices == 2)
 assert(profile.appearance.choices[1].choiceId == 130)
+assert(profile.snapshots[1].guildKnown == true, "A readable guild name confirms guild membership")
 barberDirty, barberChoice = true, 1
 SlashCmdList.CHAOSWORLDPVP("appearance")
 fire("BARBER_SHOP_RESULT", false)
@@ -336,4 +337,12 @@ assert(ChaOSWorldPvPDB.profiles["Test Player@CAMWOW EU5 Realm 6 PvP@3"].characte
 GetRealmName = function() return "CAMWOW EU4 Realm 4 PvE" end
 fire("PLAYER_LOGIN")
 assert(ChaOSWorldPvPDB.profiles["Test Player@CAMWOW EU4 Realm 4 PvE@3"].character.ruleset == "pve")
+GetGuildInfo = function() return nil end
+IsInGuild = function() return false end
+fire("PLAYER_GUILD_UPDATE", "player")
+local noGuildProfile = ChaOSWorldPvPDB.profiles["Test Player@CAMWOW EU4 Realm 4 PvE@3"]
+assert(noGuildProfile.snapshots[#noGuildProfile.snapshots].guildKnown == true, "Explicit absence is known, not a missing login read")
+IsInGuild = function() return true end
+fire("PLAYER_GUILD_UPDATE", "player")
+assert(noGuildProfile.snapshots[#noGuildProfile.snapshots].guildKnown == nil, "An unloaded guild name is not a confirmed absence")
 print("Collector simulated scenario passed")

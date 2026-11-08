@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activityCharacter, dailyActivity, dayBounds, dayKey, filterDay, formatSessionDuration, guildEvents, probableGroups, selectGroupSessions, sortActivity } from "../client/activity.js";
+import { activityCharacter, dailyActivity, dayBounds, dayKey, filterDay, formatSessionDuration, guildEvents, guildEvidence, probableGroups, selectGroupSessions, sortActivity } from "../client/activity.js";
 
 const noon = new Date(2026, 10, 8, 12).getTime() / 1000;
 const event = (at, amount = 1, type = "honor-gain", location = { mapId: 37, zone: "Elwynn", x: .5, y: .5 }) =>
@@ -162,4 +162,35 @@ test("sessions can cross midnight but daily filters count only that day's eviden
   assert.equal(second[0].hk, 6);
   assert.equal(second[0].sessionStart, midnight - 300);
   assert.equal(selectGroupSessions(groups, { day: "2026-11-07" }).length, 0);
+});
+
+test("legacy missing guild reads can support a probable group using a later same-session observation", () => {
+  const a = member("Alice"), b = member("Bob", 1);
+  b.snapshots[0].guild = null;
+  b.snapshots.push({ at: noon + 300, guild: "Guild" });
+  const before = structuredClone(b);
+  const [session] = probableGroups([a, b]);
+  assert.equal(session.members.length, 2);
+  assert.equal(session.inferredGuildMembers, 1);
+  assert.equal(session.members.find((item) => item.key === "Bob").guildInferred, true);
+  assert.equal(guildEvents(b, "Guild").length, 0, "Inferred guild membership must not rewrite confirmed historical guild totals");
+  assert.deepEqual(b, before);
+});
+
+test("guild inference never overrides confirmed absence, a session boundary, a source change or a later explicit join", () => {
+  const scenarios = [
+    (b) => { b.snapshots[0].guildKnown = true; },
+    (b) => { b.snapshots[1].guildKnown = true; },
+    (b) => { b.events.push({ at: noon + 100, type: "session-end" }); },
+    (b) => { b.events.push({ at: noon + 100, type: "session-start" }); },
+    (b) => { b.events.push({ at: noon + 300, type: "session-start" }); },
+    (b) => { b.events[0].sourceId = "old"; b.snapshots[1].sourceId = "other"; },
+    (b) => { b.snapshots.shift(); },
+  ];
+  for (const change of scenarios) {
+    const b = member("Bob", 1);
+    b.snapshots = [{ at: noon - 100, guild: null }, { at: noon + 300, guild: "Guild" }];
+    change(b);
+    assert.equal(guildEvidence(b).has(b.events[0]), false);
+  }
 });

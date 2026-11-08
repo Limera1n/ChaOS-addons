@@ -139,6 +139,7 @@ export function validateImport(input) {
       item.lifetimeHK == null ? null : integer(item.lifetimeHK, 1000000000),
     ...(item.honorPoints == null ? {} : { honorPoints: integer(item.honorPoints, 100000000) }),
     guild: optionalString(item.guild),
+    ...(item.guildKnown == null ? {} : { guildKnown: oneOf(item.guildKnown, [true, false]) }),
     equipment: list(snapshotEquipment(item, equipmentSets), 19).map((slot) => {
       record(slot);
       const slotId = integer(slot.slot, 19);

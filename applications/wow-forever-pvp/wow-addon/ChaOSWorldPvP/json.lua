@@ -1,4 +1,4 @@
-ChaOSWorldPvP = { version = "0.5.10" }
+ChaOSWorldPvP = { version = "0.5.11" }
 local ns = ChaOSWorldPvP
 -- Send each distinct loadout once, while retaining every dated observation.
 -- Copy snapshot metadata so exporting never rewrites SavedVariables history.

@@ -44,22 +44,53 @@ export function guildEvents(character, guild) {
   });
 }
 
+// Old clients often read GetGuildInfo before the login roster was ready and
+// exported null. A later legacy snapshot in the same uninterrupted session is
+// usable as an inference, never as confirmed historical membership.
+export function guildEvidence(character) {
+  const snapshots = character.snapshots;
+  const upcoming = [];
+  let known = null;
+  for (let i = snapshots.length - 1; i >= 0; i--) {
+    const snapshot = snapshots[i];
+    if (snapshot.guild || snapshot.guildKnown === true) known = snapshot;
+    upcoming[i] = known;
+  }
+  const boundaries = character.events.filter((item) => item.type === "session-start" || item.type === "session-end");
+  const result = new Map();
+  let next = 0, boundaryIndex = 0;
+  for (const event of character.events) {
+    while (next < snapshots.length && snapshots[next].at <= event.at) next++;
+    while (boundaryIndex < boundaries.length && boundaries[boundaryIndex].at <= event.at) boundaryIndex++;
+    const previous = snapshots[next - 1];
+    if (previous?.guild) { result.set(event, { guild: previous.guild, inferred: false }); continue; }
+    if (!previous || previous.guildKnown === true) continue;
+    const future = upcoming[next];
+    if (!future?.guild || future.guildKnown === true) continue;
+    if (event.sourceId && future.sourceId && event.sourceId !== future.sourceId) continue;
+    const boundary = boundaries[boundaryIndex];
+    if (boundary && (boundary.at < future.at || (boundary.at === future.at && boundary.type === "session-start"))) continue;
+    result.set(event, { guild: future.guild, inferred: true });
+  }
+  return result;
+}
+
 // These are proximity observations, never evidence of actual party membership.
 // Short encounters establish proximity. Repeated encounters with two shared
 // participants form a session with no duration cap, including across zones.
 export function probableGroups(characters, { day = "", windowSeconds = 120, radius = 0.03, inactivitySeconds = 1800 } = {}) {
   const observations = [];
   for (const character of characters) {
-    let next = 0;
+    const evidence = guildEvidence(character);
     for (const event of character.events) {
-      while (next < character.snapshots.length && character.snapshots[next].at <= event.at) next++;
-      const guild = character.snapshots[next - 1]?.guild;
+      const membership = evidence.get(event);
+      const guild = membership?.guild;
       const position = event.location;
       if (!guild || event.context !== "world" || !["honor-gain", "player-kill"].includes(event.type)
         || !Number.isFinite(position?.x) || !Number.isFinite(position?.y)
         || position.x < 0 || position.x > 1 || position.y < 0 || position.y > 1
         || (day && dayKey(event.at) !== day)) continue;
-      observations.push({ character, event, guild, scope: JSON.stringify([...identityScope(character), guild, position.mapId, dayKey(event.at)]) });
+      observations.push({ character, event, guild, guildInferred: membership.inferred, scope: JSON.stringify([...identityScope(character), guild, position.mapId, dayKey(event.at)]) });
     }
   }
   observations.sort((a, b) => a.event.at - b.event.at || a.character.key.localeCompare(b.character.key));
@@ -92,7 +123,9 @@ export function probableGroups(characters, { day = "", windowSeconds = 120, radi
     cluster.end = event.at;
     cluster.minX = Math.min(cluster.minX, x); cluster.maxX = Math.max(cluster.maxX, x);
     cluster.minY = Math.min(cluster.minY, y); cluster.maxY = Math.max(cluster.maxY, y);
-    cluster.members.set(observation.character.key, { key: observation.character.key, name: observation.character.name });
+    const member = cluster.members.get(observation.character.key);
+    cluster.members.set(observation.character.key, { key: observation.character.key, name: observation.character.name,
+      guildInferred: observation.guildInferred && member?.guildInferred !== false });
     if (event.type === "honor-gain") cluster.hk += event.amount;
     else cluster.kills++;
     cluster.observations++;
@@ -133,13 +166,17 @@ function summarizeGroupSession(encounters, original = null) {
   const zones = new Map();
   let hk = 0, kills = 0, observations = 0;
   for (const encounter of encounters) {
-    for (const member of encounter.members) members.set(member.key, member);
+    for (const member of encounter.members) {
+      const previous = members.get(member.key);
+      members.set(member.key, { ...member, guildInferred: member.guildInferred && previous?.guildInferred !== false });
+    }
     zones.set(encounter.mapId, encounter.zone);
     hk += encounter.hk; kills += encounter.kills; observations += encounter.observations;
   }
   return { ...last, start: first.start, end: last.end,
     sessionStart: original?.sessionStart ?? first.start, sessionEnd: original?.sessionEnd ?? last.end,
-    members: [...members.values()], zones: [...zones.values()], hk, kills, observations, encounters };
+    members: [...members.values()], inferredGuildMembers: [...members.values()].filter((member) => member.guildInferred).length,
+    zones: [...zones.values()], hk, kills, observations, encounters };
 }
 
 // Filtering a multi-zone, multi-day session must also filter its credited VH,

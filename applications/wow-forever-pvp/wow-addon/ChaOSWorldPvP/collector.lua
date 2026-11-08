@@ -290,12 +290,14 @@ local function snapshot()
         ns.Array(appearance.choices)
         character.appearance = appearance
     end
+    local guild = text(read(GetGuildInfo, "player"))
+    local guildKnown = guild ~= nil or read(IsInGuild) == false
     append("snapshots", {
         id = nextId(), at = now(), lifetimeHK = number(read(GetPVPLifetimeStats)),
         playedSeconds = profile.played and profile.played.seconds,
         playedAt = profile.played and profile.played.at,
         honorPoints = honorPoints(),
-        guild = text(read(GetGuildInfo, "player")), equipment = equipment(),
+        guild = guild, guildKnown = guildKnown or nil, equipment = equipment(),
     }, 300)
 end
 local function sample()

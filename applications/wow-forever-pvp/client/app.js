@@ -461,6 +461,7 @@ function renderEncounters() {
     ${group.zones.length > 1 ? `<p class="encounter-route" title="${escape(group.zones.join(" → "))}">${escape(group.zones.slice(0, 3).join(" → "))}${group.zones.length > 3 ? "…" : ""}</p>` : ""}
     <p class="encounter-reading"><strong>${count(group.members.length)} membres observés</strong><span>+${count(group.hk)} VH créditées · ${count(group.kills)} coup(s) fatal(s)</span></p>
     <p class="encounter-members">${group.members.map((member) => `<a href="#player=${encodeURIComponent(member.key)}">${escape(member.name)}</a>`).join(" · ")}</p>
+    ${group.inferredGuildMembers ? `<p class="muted">Guilde déduite d’un relevé ultérieur de la même session pour ${count(group.inferredGuildMembers)} membre(s).</p>` : ""}
     <div class="encounter-footer"><small>Durée observée : ${escape(formatSessionDuration(group.end - group.start))} · ${count(group.encounters.length)} rapprochement(s)</small><button type="button" data-encounter="${index}">Voir les positions ↗</button></div>
     </article>`).join("") : '<p class="muted encounter-empty">Aucun groupe probable sur cette sélection. Deux membres avec des positions proches sont nécessaires ; importer leurs relevés permet de les rapprocher.</p>';
 }
