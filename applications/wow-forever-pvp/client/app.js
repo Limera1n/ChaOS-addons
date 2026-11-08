@@ -5,7 +5,7 @@ import { mapOutlines } from "./map-outlines.js";
 import { bindEquipmentTooltips, hideEquipmentTooltip } from "./item-tooltips.js";
 import { installDesktopCursor } from "./desktop-cursor.js";
 import { canonicalLinkKey, scopeLabel } from "./identity.js";
-import { activityCharacter, dailyActivity, dayBounds, dayKey, filterDay, guildEvents, probableGroups, sortActivity } from "./activity.js";
+import { activityCharacter, dailyActivity, dayBounds, dayKey, filterDay, formatSessionDuration, guildEvents, probableGroups, selectGroupSessions, sortActivity } from "./activity.js";
 
 installDesktopCursor();
 
@@ -450,16 +450,18 @@ function renderDailyActivity() {
 }
 
 function renderEncounters() {
-  visibleGroups = allGroups.filter((group) =>
-    (directory === "guilds" ? group.guildKey === selectedGuild : group.members.some((member) => member.key === selectedKey))
-    && (!selectedDay || dayKey(group.start) === selectedDay)
-    && (selectedMap === AZEROTH || mapContains(selectedMap, String(group.mapId))));
-  $("#encounters-count").textContent = `${count(visibleGroups.length)} séquence(s)${visibleGroups.length > 12 ? " · 12 plus récentes affichées" : ""}`;
+  const sessions = allGroups.filter((group) => directory === "guilds" ? group.guildKey === selectedGuild : group.members.some((member) => member.key === selectedKey));
+  visibleGroups = selectGroupSessions(sessions, { day: selectedDay,
+    includesMap: (mapId) => selectedMap === AZEROTH || mapContains(selectedMap, String(mapId)) })
+    .filter((group) => directory === "guilds" || group.members.some((member) => member.key === selectedKey));
+  $("#encounters-count").textContent = `${count(visibleGroups.length)} session(s)${visibleGroups.length > 12 ? " · 12 plus récentes affichées" : ""}`;
   $("#encounters").innerHTML = visibleGroups.length ? visibleGroups.slice(0, 12).map((group, index) => `<article class="encounter-card">
-    <div class="encounter-heading"><span class="encounter-tag">Groupe probable</span><time>${escape(date(group.start))}</time></div>
-    <h4>${escape(group.zone)}</h4><p class="encounter-reading"><strong>${count(group.members.length)} membres</strong><span>+${count(group.hk)} VH créditées · ${count(group.kills)} coup(s) fatal(s)</span></p>
+    <div class="encounter-heading"><span class="encounter-tag">Session probable</span><time>${escape(date(group.start))} → ${escape(dayKey(group.start) === dayKey(group.end) ? new Date(group.end * 1000).toLocaleTimeString("fr-FR") : date(group.end))}</time></div>
+    <h4>${group.zones.length === 1 ? escape(group.zone) : `${count(group.zones.length)} zones parcourues`}</h4>
+    ${group.zones.length > 1 ? `<p class="encounter-route" title="${escape(group.zones.join(" → "))}">${escape(group.zones.slice(0, 3).join(" → "))}${group.zones.length > 3 ? "…" : ""}</p>` : ""}
+    <p class="encounter-reading"><strong>${count(group.members.length)} membres observés</strong><span>+${count(group.hk)} VH créditées · ${count(group.kills)} coup(s) fatal(s)</span></p>
     <p class="encounter-members">${group.members.map((member) => `<a href="#player=${encodeURIComponent(member.key)}">${escape(member.name)}</a>`).join(" · ")}</p>
-    <div class="encounter-footer"><small>${Math.max(1, group.end - group.start)} s · ${count(group.observations)} observation(s)</small><button type="button" data-encounter="${index}">Voir sur la carte ↗</button></div>
+    <div class="encounter-footer"><small>Durée observée : ${escape(formatSessionDuration(group.end - group.start))} · ${count(group.encounters.length)} rapprochement(s)</small><button type="button" data-encounter="${index}">Voir les positions ↗</button></div>
     </article>`).join("") : '<p class="muted encounter-empty">Aucun groupe probable sur cette sélection. Deux membres avec des positions proches sont nécessaires ; importer leurs relevés permet de les rapprocher.</p>';
 }
 function selectMap(mapId) {
@@ -588,12 +590,12 @@ function renderMap(events) {
     }
     map.append(marker);
   }
-  for (const group of visibleGroups) {
-    const position = projectPosition({ mapId: group.mapId, x: group.x, y: group.y }, mapId);
+  for (const group of visibleGroups) for (const encounter of group.encounters) {
+    const position = projectPosition({ mapId: encounter.mapId, x: encounter.x, y: encounter.y }, mapId);
     if (!position) continue;
     const ring = svgElement("circle", { class: "map-group", cx: position.x * 150, cy: position.y * 100, r: 2.2 });
     const title = svgElement("title", {});
-    title.textContent = `Groupe probable · ${group.members.map((member) => member.name).join(", ")} · ${date(group.start)}`;
+    title.textContent = `Session probable · ${encounter.members.map((member) => member.name).join(", ")} · ${date(encounter.start)}`;
     ring.append(title);
     map.append(ring);
   }
@@ -621,8 +623,7 @@ $("#encounters").addEventListener("click", (event) => {
   const button = event.target.closest("[data-encounter]");
   if (!button) return;
   const group = visibleGroups[Number(button.dataset.encounter)];
-  selectedMap = String(group.mapId);
-  selectedDay = dayKey(group.start);
+  selectedMap = group.zones.length > 1 ? AZEROTH : String(group.mapId);
   if (directory === "players") profileView = "pvp";
   render();
   $("#map-current").scrollIntoView({ block: "center", behavior: "smooth" });

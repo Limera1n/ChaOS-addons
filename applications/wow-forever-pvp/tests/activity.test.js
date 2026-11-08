@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activityCharacter, dailyActivity, dayBounds, dayKey, filterDay, guildEvents, probableGroups, sortActivity } from "../client/activity.js";
+import { activityCharacter, dailyActivity, dayBounds, dayKey, filterDay, formatSessionDuration, guildEvents, probableGroups, selectGroupSessions, sortActivity } from "../client/activity.js";
 
 const noon = new Date(2026, 10, 8, 12).getTime() / 1000;
 const event = (at, amount = 1, type = "honor-gain", location = { mapId: 37, zone: "Elwynn", x: .5, y: .5 }) =>
@@ -101,4 +101,65 @@ test("proximity sequences do not chain across a long session or transfer after l
   player.snapshots.push({ at: noon + 40, guild: "Other" });
   assert.equal(guildEvents(player, "Guild").length, 1);
   assert.equal(guildEvents(player, "Other").length, 1);
+});
+
+test("nearby fragments with two shared players merge as the group grows and moves", () => {
+  const a = member("Alice"), b = member("Bob"), c = member("Cara");
+  a.events = [event(noon), event(noon + 90, 1, "honor-gain", { mapId: 37, x: .7, y: .7 }), event(noon + 180, 1, "honor-gain", { mapId: 37, x: .2, y: .2 })];
+  b.events = structuredClone(a.events).map((item) => ({ ...item, at: item.at + 1 }));
+  c.events = structuredClone(a.events.slice(1)).map((item) => ({ ...item, at: item.at + 2 }));
+  const groups = probableGroups([a, b, c]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].members.length, 3);
+  assert.equal(groups[0].encounters.length, 3);
+  assert.equal(groups[0].observations, 8);
+  assert.equal(groups[0].hk, 8);
+  assert.equal(groups[0].end, noon + 182);
+});
+
+test("a probable session can last hours and span zones while requiring repeated proximity evidence", () => {
+  const a = member("Alice"), b = member("Bob");
+  a.events = Array.from({ length: 13 }, (_, i) => event(noon + i * 1200, 2, "honor-gain", {
+    mapId: i < 6 ? 37 : 14, zone: i < 6 ? "Elwynn" : "Durotar", x: .2 + i * .04, y: .5 }));
+  b.events = structuredClone(a.events).map((item) => ({ ...item, at: item.at + 1 }));
+  const groups = probableGroups([a, b]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].end - groups[0].start, 4 * 3600 + 1);
+  assert.equal(groups[0].encounters.length, 13);
+  assert.equal(groups[0].hk, 52);
+  assert.equal(groups[0].observations, 26);
+  assert.deepEqual(groups[0].zones, ["Elwynn", "Durotar"]);
+  const scoped = selectGroupSessions(groups, { includesMap: (id) => id === 14 });
+  assert.equal(scoped[0].hk, 28);
+  assert.equal(scoped[0].encounters.length, 7);
+  assert.deepEqual(scoped[0].zones, ["Durotar"]);
+  assert.equal(groups[0].hk, 52, "Filtering must not mutate the original session");
+  assert.equal(formatSessionDuration(4 * 3600 + 1), "4 h");
+});
+
+test("sessions split after inactivity and do not merge through a single shared guildmate", () => {
+  const a = member("Alice"), b = member("Bob"), c = member("Cara");
+  a.events = [event(noon), event(noon + 1900)];
+  b.events = [event(noon + 1), event(noon + 1901)];
+  assert.equal(probableGroups([a, b]).length, 2);
+  a.events = [event(noon)];
+  b.events = [event(noon + 1), event(noon + 300)];
+  c.events = [event(noon + 301)];
+  assert.equal(probableGroups([a, b, c]).length, 2);
+});
+
+test("sessions can cross midnight but daily filters count only that day's evidence", () => {
+  const midnight = dayBounds("2026-11-09").start;
+  const a = member("Alice"), b = member("Bob");
+  a.events = [event(midnight - 300, 2), event(midnight + 300, 3)];
+  b.events = [event(midnight - 299, 2), event(midnight + 301, 3)];
+  const groups = probableGroups([a, b]);
+  assert.equal(groups.length, 1);
+  assert.equal(groups[0].hk, 10);
+  const first = selectGroupSessions(groups, { day: "2026-11-08" });
+  const second = selectGroupSessions(groups, { day: "2026-11-09" });
+  assert.equal(first[0].hk, 4);
+  assert.equal(second[0].hk, 6);
+  assert.equal(second[0].sessionStart, midnight - 300);
+  assert.equal(selectGroupSessions(groups, { day: "2026-11-07" }).length, 0);
 });

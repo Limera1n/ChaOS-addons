@@ -45,9 +45,9 @@ export function guildEvents(character, guild) {
 }
 
 // These are proximity observations, never evidence of actual party membership.
-// Each sequence spans at most two minutes and a bounding-box diagonal <= 3%
-// of a single zone map. Spatial cells keep unrelated fights apart efficiently.
-export function probableGroups(characters, { day = "", windowSeconds = 120, radius = 0.03 } = {}) {
+// Short encounters establish proximity. Repeated encounters with two shared
+// participants form a session with no duration cap, including across zones.
+export function probableGroups(characters, { day = "", windowSeconds = 120, radius = 0.03, inactivitySeconds = 1800 } = {}) {
   const observations = [];
   for (const character of characters) {
     let next = 0;
@@ -97,7 +97,63 @@ export function probableGroups(characters, { day = "", windowSeconds = 120, radi
     else cluster.kills++;
     cluster.observations++;
   }
-  return clusters.filter((item) => item.members.size >= 2).map(({ members, ...item }) => ({ ...item,
+  const encounters = clusters.filter((item) => item.members.size >= 2).map(({ members, ...item }) => ({ ...item,
     x: (item.minX + item.maxX) / 2, y: (item.minY + item.maxY) / 2, members: [...members.values()] }))
-    .sort((a, b) => b.start - a.start);
+    .sort((a, b) => a.start - b.start);
+  const sessions = [];
+  const active = new Map();
+  for (const encounter of encounters) {
+    const candidates = (active.get(encounter.guildKey) ?? []).filter((session) => encounter.start - session.last.end <= inactivitySeconds);
+    let match;
+    let bestOverlap = 1;
+    for (const session of candidates) {
+      const keys = new Set(session.last.members.map((member) => member.key));
+      const overlap = encounter.members.filter((member) => keys.has(member.key)).length;
+      if (overlap > bestOverlap || (overlap === bestOverlap && match && session.last.end > match.last.end)) {
+        match = session;
+        bestOverlap = overlap;
+      }
+    }
+    if (!match) {
+      match = { encounters: [], last: encounter };
+      candidates.push(match);
+      sessions.push(match);
+    }
+    match.encounters.push(encounter);
+    if (encounter.end >= match.last.end) match.last = encounter;
+    active.set(encounter.guildKey, candidates);
+  }
+  return sessions.map((session) => summarizeGroupSession(session.encounters)).sort((a, b) => b.end - a.end);
+}
+
+function summarizeGroupSession(encounters, original = null) {
+  const first = encounters[0];
+  const last = encounters.reduce((latest, item) => item.end > latest.end ? item : latest, first);
+  const members = new Map();
+  const zones = new Map();
+  let hk = 0, kills = 0, observations = 0;
+  for (const encounter of encounters) {
+    for (const member of encounter.members) members.set(member.key, member);
+    zones.set(encounter.mapId, encounter.zone);
+    hk += encounter.hk; kills += encounter.kills; observations += encounter.observations;
+  }
+  return { ...last, start: first.start, end: last.end,
+    sessionStart: original?.sessionStart ?? first.start, sessionEnd: original?.sessionEnd ?? last.end,
+    members: [...members.values()], zones: [...zones.values()], hk, kills, observations, encounters };
+}
+
+// Filtering a multi-zone, multi-day session must also filter its credited VH,
+// participants and markers, rather than attributing the whole outing to a day.
+export function selectGroupSessions(sessions, { day = "", includesMap = () => true } = {}) {
+  return sessions.flatMap((session) => {
+    const encounters = session.encounters.filter((item) => (!day || dayKey(item.start) === day) && includesMap(item.mapId));
+    return encounters.length ? [summarizeGroupSession(encounters, session)] : [];
+  }).sort((a, b) => b.end - a.end);
+}
+
+export function formatSessionDuration(seconds) {
+  const minutes = Math.floor(Math.max(0, seconds) / 60);
+  if (!minutes) return "moins d’une minute";
+  const hours = Math.floor(minutes / 60);
+  return hours ? `${hours} h${minutes % 60 ? ` ${minutes % 60} min` : ""}` : `${minutes} min`;
 }

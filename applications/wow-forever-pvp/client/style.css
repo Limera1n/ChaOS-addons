@@ -137,6 +137,7 @@ select:focus-visible {
 .encounter-reading strong { display: block; font-size: 18px; color: var(--accent); }
 .encounter-reading span { font-size: 12px; color: var(--muted); }
 .encounter-members { font-size: 13px; }
+.encounter-route { font-size: 12px; color: var(--muted); margin: -5px 0 12px; }
 .encounter-members a { color: #edcf8e; text-underline-offset: 3px; }
 .encounter-footer { border-top: 1px solid var(--line); padding-top: 12px; }
 .encounter-footer button { padding: 7px 10px; font-size: 12px; background: transparent; color: var(--accent); border-color: #65724e; }

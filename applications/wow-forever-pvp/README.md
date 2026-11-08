@@ -136,7 +136,7 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.9.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.10.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
@@ -192,13 +192,25 @@ Les **groupes probables** rapprochent au moins deux personnages distincts,
 de la même guilde au moment des événements, du même ruleset et de la même région.
 Ils doivent avoir des VH ou des coups fatals en monde ouvert, sur la même carte,
 dans une fenêtre de 120 secondes. La diagonale de la boîte des positions doit
-être inférieure à 0,03 en coordonnées normalisées de carte. La fenêtre ne
-s’allonge pas par chaînage ; les positions manquantes, les morts et les BG ne
-servent pas de preuve. Les cartes récapitulatives affichent les participants,
-la zone et les crédits de VH, avec un bouton pour retrouver la position.
-Les séquences sont également entourées sur la carte. Il s’agit d’une inférence
-de proximité, pas d’une preuve d’appartenance au groupe ou de victimes uniques.
-Les douze séquences les plus récentes de la sélection sont détaillées.
+être inférieure à 0,03 en coordonnées normalisées de carte. Les positions
+manquantes, les morts et les BG ne servent pas d’indices de proximité.
+
+Depuis **0.5.10**, les rapprochements sont réunis en **sessions probables**
+quand au moins deux participants restent communs au rapprochement précédent
+et que le délai depuis son dernier indice ne dépasse pas 30 minutes. Une
+session peut durer plusieurs heures et traverser plusieurs zones ou minuit.
+Sa durée va du premier au dernier indice observé, sans prouver une présence
+continue pendant les intervalles. Un seul membre commun ne suffit pas à
+relier deux groupes distincts. Une interruption de plus de 30 minutes crée
+une nouvelle session ; il n’y a pas de durée maximale totale.
+
+Les fiches affichent la plage horaire, les participants observés, les zones
+et les crédits de VH. Le bouton affiche les positions des rapprochements,
+sans inventer de trajet entre elles. Les filtres de jour et de carte ne
+conservent que les indices correspondants, y compris pour les VH et les
+participants d’une session sur plusieurs jours ou zones.
+Il s’agit d’une inférence, pas d’une preuve d’appartenance au groupe ou de
+victimes uniques. Les douze sessions les plus récentes sont détaillées.
 
 ### Pourquoi les exports contiennent un historique
 
