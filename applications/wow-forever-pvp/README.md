@@ -136,7 +136,7 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.7.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.9.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
@@ -146,16 +146,25 @@ Les onglets **Joueurs** et **Guildes** ouvrent des pages distinctes, avec des
 liens directs partageables. Le nom de guilde sur un profil ouvre sa fiche ;
 chaque contribution renvoie au personnage correspondant.
 
-La page de guilde réunit les personnages importés du même serveur, de la même
-région et des mêmes règles de jeu. Elle affiche les compteurs de VH cumulées
+La page de guilde réunit les personnages importés de la même région et du même
+ruleset (PvP, PvE…). Les libellés CAMWOW EU4/EU5 Realm 4/6 décrivent des layers
+et ne séparent ni les guildes ni les profils d’un même personnage. Le ruleset
+est déduit du suffixe PvP/PvE quand un ancien export le laisse inconnu. Les
+imports non classifiables restent séparés jusqu’à identification du ruleset.
+Les profils déjà importés sont regroupés en mémoire au chargement : les
+observations communes sont dédoublonnées par source et identifiant, les
+historiques conservés, puis persistés au prochain import réussi. La lecture
+seule ne réécrit pas la sauvegarde d’origine. Les anciens liens restent valides.
+La fiche affiche les compteurs de VH cumulées
 des membres actuels suivis, les gains observés pendant l’appartenance à la
 guilde (tous contextes), leur part en monde ouvert et les contributions par
 personnage. Les anciens membres restent dans l’historique des contributions.
 Les crédits de VH sont additionnés par participant, sans les présenter comme
 des victimes uniques. Les membres sans export ne sont pas inventés.
 
-Le profil affiche le `/played` total en jours, heures et minutes, avec la date
-de mesure. Le collecteur le demande à la connexion et avant l’export via
+Le profil affiche le `/played` total dans un encart « Temps de jeu » en jours,
+heures et minutes ; la date de mesure se trouve en infobulle. Le collecteur
+le demande à la connexion et avant l’export via
 `RequestTimePlayed`, puis lit `TIME_PLAYED_MSG`. L’export attend la réponse
 jusqu’à deux secondes ; en cas d’indisponibilité, il conserve la dernière
 mesure datée. Les anciens exports affichent « Non relevé ».
@@ -163,6 +172,51 @@ mesure datée. Les anciens exports affichent « Non relevé ».
 L’étude du compagnon d’envoi automatique est dans
 [docs/wow-forever-sync.md](../../docs/wow-forever-sync.md). Aucun envoi automatique
 n’est activé par cette version.
+
+### Journées et groupes probables
+
+Le profil s’ouvre sur **Joueur contre joueur**, placé avant **Personnage**.
+Le viewer 3D se charge seulement à l’ouverture de l’onglet Personnage.
+
+Le sélecteur **Journée** filtre les gains observés, les courbes, le journal,
+les rapprochements et la carte, sur les pages des joueurs et des guildes.
+Les dates utilisent le fuseau local du navigateur, avec des journées calendaires
+(les changements d’heure peuvent donc produire des jours de 23 ou 25 heures).
+Les derniers compteurs cumulés, le solde disponible et le `/played` restent
+des mesures datées ; ils ne sont pas présentés comme des gains journaliers.
+**Jour après jour** permet de sélectionner un jour et de trier par date ou
+nombre de VH. Le journal et la répartition quotidienne respectent aussi la carte
+choisie. Le journal affiche jusqu’à 200 événements selon l’ordre sélectionné.
+
+Les **groupes probables** rapprochent au moins deux personnages distincts,
+de la même guilde au moment des événements, du même ruleset et de la même région.
+Ils doivent avoir des VH ou des coups fatals en monde ouvert, sur la même carte,
+dans une fenêtre de 120 secondes. La diagonale de la boîte des positions doit
+être inférieure à 0,03 en coordonnées normalisées de carte. La fenêtre ne
+s’allonge pas par chaînage ; les positions manquantes, les morts et les BG ne
+servent pas de preuve. Les cartes récapitulatives affichent les participants,
+la zone et les crédits de VH, avec un bouton pour retrouver la position.
+Les séquences sont également entourées sur la carte. Il s’agit d’une inférence
+de proximité, pas d’une preuve d’appartenance au groupe ou de victimes uniques.
+Les douze séquences les plus récentes de la sélection sont détaillées.
+
+### Pourquoi les exports contiennent un historique
+
+L’addon conserve jusqu’à 300 relevés et 5 000 événements par personnage local.
+Les connexions, déconnexions, `/reload` et exports peuvent ajouter des relevés
+datés, avec l’équipement observé à cet instant. Cet historique permet de
+récupérer les périodes qui n’avaient pas encore été importées. Le réimport
+des mêmes identifiants n’ajoute pas de VH. Il ne reconstitue aucun combat
+antérieur à la collecte et n’attribue pas les gains hors ligne à une zone.
+
+À partir de **0.5.9**, l’export conserve les relevés mais n’envoie qu’une seule
+fois chaque équipement distinct dans `equipmentSets`. Chaque relevé utilise
+un `equipmentRef` indexé à partir de zéro. Le serveur reconstruit les mêmes
+objets avant validation et sauvegarde ; l’historique local n’est pas modifié.
+Les infobulles complètes restent limitées à l’équipement actuel.
+**Mettre le site à jour avant l’addon 0.5.9** : les anciens sites ne lisent pas
+les références d’équipement. Les anciens exports complets restent acceptés
+par le nouveau site.
 
 ## Diagnostiquer une action bloquée en jeu
 
@@ -250,8 +304,8 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
   cinq secondes ou un changement de contexte rend le gain de contexte inconnu.
 - Les positions correspondent à la détection, avec un intervalle de collecte de
   deux secondes. Les coordonnées ne sont pas une preuve du point exact du combat.
-- Région issue du client, règles de jeu indiquées `unknown` : classification
-  manuelle des règles et gestion des changements d'identité restent à développer.
+- Région issue du client, ruleset déduit du suffixe PvP/PvE du libellé de layer
+  s’il n’est pas déjà renseigné. Sans indice, il reste `unknown`.
 - La guilde et le niveau sont relevés aux exports/sessions. Un nouvel export
   de l'historique ne doit pas réattribuer les anciennes observations.
 - Limite locale de 5 000 événements et 300 relevés par personnage dans l'addon ;

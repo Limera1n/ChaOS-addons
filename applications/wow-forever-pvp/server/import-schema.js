@@ -1,3 +1,5 @@
+import { identityRuleset, playerKey, playerName } from "../client/identity.js";
+
 export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 const MAX_TIME = 4102444800;
 const fail = () => {
@@ -82,11 +84,20 @@ function playedTime(item) {
   return { playedSeconds, playedAt };
 }
 
+function snapshotEquipment(item, sets) {
+  if (item.equipmentRef == null) return item.equipment;
+  if (item.equipment != null || !sets) fail();
+  const index = integer(item.equipmentRef, 299);
+  if (index >= sets.length) fail();
+  return sets[index];
+}
+
 // Rebuild every object rather than persisting arbitrary keys from an untrusted export.
 export function validateImport(input) {
   record(input);
   if (input.format !== "chaos-world-pvp" || input.version !== 1) fail();
   const character = record(input.character);
+  const equipmentSets = input.equipmentSets == null ? null : list(input.equipmentSets, 300).map((items) => list(items, 19));
   const result = {
     format: input.format,
     version: 1,
@@ -109,6 +120,8 @@ export function validateImport(input) {
     snapshots: [],
     events: [],
   };
+  result.character.ruleset = identityRuleset(result.character);
+  result.character.name = playerName(result.character);
   if (character.appearance != null)
     result.character.appearance = characterAppearance(character.appearance, result.character, result.exportedAt);
   const seen = new Set();
@@ -126,7 +139,7 @@ export function validateImport(input) {
       item.lifetimeHK == null ? null : integer(item.lifetimeHK, 1000000000),
     ...(item.honorPoints == null ? {} : { honorPoints: integer(item.honorPoints, 100000000) }),
     guild: optionalString(item.guild),
-    equipment: list(item.equipment, 19).map((slot) => {
+    equipment: list(snapshotEquipment(item, equipmentSets), 19).map((slot) => {
       record(slot);
       const slotId = integer(slot.slot, 19);
       if (slotId < 1) fail();
@@ -202,10 +215,5 @@ export function validateImport(input) {
 }
 
 export function characterKey(character) {
-  return JSON.stringify([
-    character.region,
-    character.ruleset,
-    character.realm,
-    character.name,
-  ]);
+  return playerKey(character);
 }

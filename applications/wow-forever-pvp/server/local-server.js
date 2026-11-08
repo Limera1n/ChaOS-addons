@@ -21,6 +21,8 @@ export function createLocalServer({
       ["/desktop-cursor.js", ["desktop-cursor.js", "text/javascript; charset=utf-8"]],
       ["/style.css", ["style.css", "text/css; charset=utf-8"]],
       ["/model.js", ["model.js", "text/javascript; charset=utf-8"]],
+      ["/identity.js", ["identity.js", "text/javascript; charset=utf-8"]],
+      ["/activity.js", ["activity.js", "text/javascript; charset=utf-8"]],
       ["/map-regions.js", ["map-regions.js", "text/javascript; charset=utf-8"]],
       ["/map-outlines.js", ["map-outlines.js", "text/javascript; charset=utf-8"]],
       ["/armory.js", ["armory.js", "text/javascript; charset=utf-8"]],

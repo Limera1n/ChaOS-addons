@@ -32,6 +32,11 @@
         <button type="button" data-directory="players" aria-pressed="true">Joueurs</button>
         <button type="button" data-directory="guilds" aria-pressed="false">Guildes</button>
       </nav>
+      <div class="period-bar">
+        <div><span class="eyebrow">EXPLORER LES COMBATS</span><strong id="period-label">Toute la période</strong></div>
+        <label>Journée <select id="day-filter" aria-label="Journée"><option value="">Toute la période</option></select></label>
+        <p class="muted">Dates en heure locale · Les compteurs cumulés restent à vie.</p>
+      </div>
       <div class="workspace">
         <aside>
           <div class="section-title">
@@ -59,6 +64,13 @@
       <section id="activity" hidden>
         <div class="section-title">
           <h2>Sur le terrain</h2>
+          <label>Trier
+            <select id="event-sort">
+              <option value="newest">Plus récent</option>
+              <option value="oldest">Plus ancien</option>
+              <option value="honor">Plus de VH</option>
+            </select>
+          </label>
           <label>Morts
             <select id="death-filter">
               <option value="all">Toutes les causes</option>
@@ -76,11 +88,20 @@
             </select></label
           >
         </div>
+        <section class="combat-intelligence" aria-labelledby="encounters-title">
+          <div class="section-title"><div><p class="eyebrow">LECTURE COLLECTIVE</p><h3 id="encounters-title">Groupes probables</h3></div><span id="encounters-count"></span></div>
+          <div id="encounters"></div>
+          <details class="inference-help"><summary>Comment sont-ils repérés ?</summary><p>Au moins deux membres de la même guilde, sur la même carte, avec des VH ou coups fatals à proximité dans une fenêtre de deux minutes. La zone de proximité représente au maximum 3 % de la diagonale de cette carte. Ce rapprochement indique une activité commune probable, sans prouver l’appartenance à un groupe en jeu. Les VH restent comptées par participant.</p></details>
+        </section>
+        <section class="daily-activity" aria-labelledby="daily-title">
+          <div class="section-title"><div><p class="eyebrow">MONDE OUVERT</p><h3 id="daily-title">Jour après jour</h3></div><span>Choisir un jour filtre aussi la carte</span></div>
+          <div id="daily-rows"></div>
+        </section>
         <div class="terrain">
           <section>
             <h3>Positions collectées</h3>
             <p class="muted">
-              Chaque marqueur indique la position du personnage suivi.
+              Chaque marqueur indique la position d’un personnage suivi.
             </p>
             <div class="map-toolbar">
               <span id="map-current" aria-live="polite">Azeroth</span>
@@ -99,7 +120,7 @@
             </div>
             <p id="map-note" class="muted" role="status"></p>
             <p class="map-caption muted">
-              <span><b class="map-honor-key">●</b> VH observées · <b class="map-honor-key">◆</b> joueurs tués · <b class="map-death-key">×</b> morts personnelles</span>
+              <span><b class="map-honor-key">●</b> VH observées · <b class="map-honor-key">◆</b> joueurs tués · <b class="map-death-key">×</b> morts · <b class="map-group-key">○</b> groupes probables</span>
               <span>© Blizzard · <a href="https://warcraftforever.games/maps" target="_blank" rel="noopener noreferrer">Fonds Warcraft Forever</a> · <a href="https://zephras.com/forever/enUS/map/" target="_blank" rel="noopener noreferrer">Contours Zephras</a></span>
             </p>
           </section>
@@ -111,8 +132,8 @@
         <h3>Journal du monde ouvert</h3>
         <p class="muted">
           Événements observés pendant la collecte uniquement. Les périodes hors
-          ligne ne sont pas reconstituées. Les 200 événements les plus récents
-          sont affichés.
+          ligne ne sont pas reconstituées. Jusqu’à 200 événements sont affichés,
+          selon le jour, la carte et l’ordre choisis.
         </p>
         <div class="table-scroll">
           <table>

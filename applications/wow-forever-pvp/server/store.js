@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { characterKey, validateImport } from "./import-schema.js";
+import { identityRuleset, playerName } from "../client/identity.js";
 
 function fillEquipmentMetadata(equipment, otherEquipment) {
   return equipment.map((item, index) => {
@@ -30,6 +31,47 @@ function fillSnapshotMetadata(item, other) {
   };
 }
 
+function reconcileObservation(previous, candidate, kind) {
+  const comparable = { ...previous, build: candidate.build, addonVersion: candidate.addonVersion };
+  if (isDeepStrictEqual(comparable, candidate)) return previous;
+  if (kind === "snapshots") {
+    const enriched = fillSnapshotMetadata(comparable, candidate);
+    const incoming = fillSnapshotMetadata(candidate, previous);
+    if (isDeepStrictEqual(enriched, incoming)) {
+      return { ...previous, equipment: enriched.equipment,
+        ...(enriched.playedSeconds == null ? {} : { playedSeconds: enriched.playedSeconds, playedAt: enriched.playedAt }) };
+    }
+  }
+  throw new Error("Conflit : un événement déjà importé a été modifié.");
+}
+
+const observationOrder = (a, b) => a.at - b.at || a.sourceKey.localeCompare(b.sourceKey);
+
+function migrateCharacters(characters) {
+  const merged = new Map();
+  for (const original of characters) {
+    const candidate = { ...original, ruleset: identityRuleset(original), name: playerName(original) };
+    candidate.key = characterKey(candidate);
+    const previous = merged.get(candidate.key);
+    if (!previous) { merged.set(candidate.key, candidate); continue; }
+    const newest = candidate.metadataAt > previous.metadataAt ? candidate : previous;
+    const result = { ...newest, key: candidate.key,
+      lastImportedAt: Math.max(previous.lastImportedAt ?? 0, candidate.lastImportedAt ?? 0) };
+    const appearance = [previous.appearance, candidate.appearance].filter(Boolean).sort((a, b) => b.at - a.at)[0];
+    if (appearance) result.appearance = appearance;
+    for (const kind of ["snapshots", "events"]) {
+      const observations = new Map(previous[kind].map((item) => [item.sourceKey, item]));
+      for (const item of candidate[kind]) {
+        const existing = observations.get(item.sourceKey);
+        observations.set(item.sourceKey, existing ? reconcileObservation(existing, item, kind) : item);
+      }
+      result[kind] = [...observations.values()].sort(observationOrder);
+    }
+    merged.set(candidate.key, result);
+  }
+  return [...merged.values()];
+}
+
 export function createTrackerStore({ dataDir, now = Date.now }) {
   const file = join(dataDir, "tracker.json");
   let state;
@@ -42,6 +84,9 @@ export function createTrackerStore({ dataDir, now = Date.now }) {
     if (error.code !== "ENOENT") throw error;
     state = { version: 1, characters: [] };
   }
+  // Existing imports become one profile immediately. The source file remains
+  // untouched until the next successful atomic import saves the merged state.
+  state.characters = migrateCharacters(state.characters);
   const assertOpen = () => {
     if (isStopped) throw new Error("Tracker stopped");
   };
@@ -86,36 +131,14 @@ export function createTrackerStore({ dataDir, now = Date.now }) {
         };
         const previous = ids.get(sourceKey);
         if (previous) {
-          const previousAtCurrentVersion = {
-            ...previous,
-            build: batch.build,
-            addonVersion: batch.addonVersion,
-          };
-          if (JSON.stringify(previousAtCurrentVersion) === JSON.stringify(candidate)) continue;
-          if (kind === "snapshots") {
-            // Older importers discarded these optional fields from otherwise identical observations.
-            const enriched = fillSnapshotMetadata(previousAtCurrentVersion, candidate);
-            const incoming = fillSnapshotMetadata(candidate, previous);
-            if (isDeepStrictEqual(enriched, incoming)) {
-              previous.equipment = enriched.equipment;
-              if (enriched.playedSeconds != null) {
-                previous.playedSeconds = enriched.playedSeconds;
-                previous.playedAt = enriched.playedAt;
-              }
-              continue;
-            }
-          }
-          throw new Error(
-            "Conflit : un événement déjà importé a été modifié.",
-          );
+          Object.assign(previous, reconcileObservation(previous, candidate, kind));
+          continue;
         }
         character[kind].push(candidate);
         ids.set(sourceKey, candidate);
         added++;
       }
-      character[kind].sort(
-        (a, b) => a.at - b.at || a.sourceKey.localeCompare(b.sourceKey),
-      );
+      character[kind].sort(observationOrder);
     }
     if (
       next.characters.reduce(

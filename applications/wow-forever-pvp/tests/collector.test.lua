@@ -289,7 +289,7 @@ for _, value in ipairs(frames) do
     if type(value.edit) == "table" then payload = value.edit.text end
 end
 assert(type(payload) == "string" and payload:find('"format":"chaos%-world%-pvp"'))
-assert(payload:find('"equipment":%['))
+assert(payload:find('"equipmentSets":%[') and payload:find('"equipmentRef":'))
 assert(payload:find('"honorPoints":0') and payload:find('"honor%-points%-gain"'))
 assert(payload:find('"victim":"Victim%-Other Realm"') and payload:find('"type":"player%-kill"'))
 assert(payload:find('"raceId":1') and payload:find('"sex":3'))
@@ -327,4 +327,13 @@ RequestTimePlayed = nil
 SlashCmdList.CHAOSWORLDPVP("export")
 deferred()
 assert(profile.snapshots[#profile.snapshots].playedSeconds == 123500, "Fallback to the last dated measurement if the API is absent")
+GetRealmName = function() return "CAMWOW EU4 Realm 4 PvP" end
+fire("PLAYER_LOGIN")
+assert(ChaOSWorldPvPDB.profiles["Test Player@CAMWOW EU4 Realm 4 PvP@3"].character.ruleset == "pvp")
+GetRealmName = function() return "CAMWOW EU5 Realm 6 PvP" end
+fire("PLAYER_LOGIN")
+assert(ChaOSWorldPvPDB.profiles["Test Player@CAMWOW EU5 Realm 6 PvP@3"].character.ruleset == "pvp")
+GetRealmName = function() return "CAMWOW EU4 Realm 4 PvE" end
+fire("PLAYER_LOGIN")
+assert(ChaOSWorldPvPDB.profiles["Test Player@CAMWOW EU4 Realm 4 PvE@3"].character.ruleset == "pve")
 print("Collector simulated scenario passed")

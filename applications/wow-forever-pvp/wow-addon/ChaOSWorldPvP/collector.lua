@@ -346,6 +346,13 @@ local function initialize()
     local key = name .. "@" .. realm .. "@" .. region
     db.profiles[key] = db.profiles[key] or { snapshots = {}, events = {}, ruleset = "unknown" }
     profile = db.profiles[key]
+    -- CAMWOW layer numbers are not server identities. Older exports left the
+    -- ruleset unknown even though the client realm label already included it.
+    if profile.ruleset == "unknown" then
+        local label = realm:lower()
+        if label:match("%f[%a]pvp%s*$") then profile.ruleset = "pvp"
+        elseif label:match("%f[%a]pve%s*$") then profile.ruleset = "pve" end
+    end
     profile.character = { name = name, realm = realm, region = region, ruleset = profile.ruleset,
         class = text(read(UnitClass, "player")), faction = text(read(UnitFactionGroup, "player")) }
     -- Session boundaries never infer gains from the offline interval.
@@ -395,6 +402,7 @@ local function showExport()
     exportFrame:Show()
     -- Only the current equipment needs full tooltips. Keep past snapshots compact.
     for _, item in ipairs(currentEquipment) do item.tooltip = equippedTooltip(item.slot) end
+    payload.snapshots, payload.equipmentSets = ns.CompactSnapshots(profile.snapshots)
     local encoded = ns.Encode(payload)
     for _, item in ipairs(currentEquipment) do item.tooltip = nil end
     exportFrame.edit:SetText(encoded)

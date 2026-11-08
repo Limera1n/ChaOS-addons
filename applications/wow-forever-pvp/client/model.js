@@ -1,3 +1,5 @@
+import { identityRuleset, identityScope } from "./identity.js";
+
 export function killLabel(item) {
   return `Joueur tué · ${item.victim ?? "nom indisponible"} · coup fatal${item.byPet ? " du familier" : " personnel"}`;
 }
@@ -114,7 +116,7 @@ export function formatPlayed(seconds) {
 }
 
 export function guildKey(character, name) {
-  return JSON.stringify([character.region, character.ruleset, character.realm, name]);
+  return JSON.stringify([...identityScope(character), name]);
 }
 
 export function listGuilds(characters) {
@@ -123,15 +125,15 @@ export function listGuilds(characters) {
     for (const snapshot of character.snapshots) {
       if (!snapshot.guild) continue;
       const key = guildKey(character, snapshot.guild);
-      guilds.set(key, { key, name: snapshot.guild, realm: character.realm, region: character.region, ruleset: character.ruleset });
+      guilds.set(key, { key, name: snapshot.guild, realm: character.realm, region: character.region, ruleset: identityRuleset(character) });
     }
   }
-  return [...guilds.values()].sort((a, b) => a.name.localeCompare(b.name, "fr") || a.realm.localeCompare(b.realm, "fr"));
+  return [...guilds.values()].sort((a, b) => a.name.localeCompare(b.name, "fr") || a.region.localeCompare(b.region) || a.ruleset.localeCompare(b.ruleset));
 }
 
 export function summarizeGuild(characters, guild) {
-  const peers = characters.filter((character) =>
-    character.region === guild.region && character.realm === guild.realm && character.ruleset === guild.ruleset);
+  const scope = JSON.stringify(identityScope(guild));
+  const peers = characters.filter((character) => JSON.stringify(identityScope(character)) === scope);
   const members = peers.filter((character) => character.snapshots.some((snapshot) => snapshot.guild === guild.name)).map((character) => ({
     character,
     current: character.snapshots.at(-1)?.guild === guild.name,

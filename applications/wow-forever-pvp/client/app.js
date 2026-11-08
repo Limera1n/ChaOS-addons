@@ -4,6 +4,8 @@ import { AZEROTH, mapContains, mapRegions, projectPosition } from "./map-regions
 import { mapOutlines } from "./map-outlines.js";
 import { bindEquipmentTooltips, hideEquipmentTooltip } from "./item-tooltips.js";
 import { installDesktopCursor } from "./desktop-cursor.js";
+import { canonicalLinkKey, scopeLabel } from "./identity.js";
+import { activityCharacter, dailyActivity, dayBounds, dayKey, filterDay, guildEvents, probableGroups, sortActivity } from "./activity.js";
 
 installDesktopCursor();
 
@@ -89,7 +91,25 @@ let selectedEvents = [];
 let mapNames = new Map();
 let directory = "players";
 let selectedGuild = null;
-let profileView = "character";
+let profileView = "pvp";
+let selectedDay = "";
+let activityOrder = "newest";
+let activityEvents = [];
+let allGroups = [];
+let visibleGroups = [];
+let mountCurrentArmory = null;
+const dayLabel = (day) => new Date(`${day}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
+const scopedCharacter = (character) => activityCharacter(character, selectedDay);
+
+function renderPeriod() {
+  const days = [...new Set(state.characters.flatMap((character) => [...character.events, ...character.snapshots].map((item) => dayKey(item.at))))].sort().reverse();
+  const picker = $("#day-filter");
+  picker.replaceChildren(new Option("Toute la période", ""));
+  for (const day of days) picker.add(new Option(dayLabel(day), day));
+  if (selectedDay && !days.includes(selectedDay)) selectedDay = "";
+  picker.value = selectedDay;
+  $("#period-label").textContent = selectedDay ? dayLabel(selectedDay) : "Toute la période";
+}
 
 function factionMark(faction) {
   if (faction === "horde") {
@@ -112,6 +132,7 @@ function setProfileView(view) {
   $("#armory-character").hidden = view !== "character";
   $("#armory-pvp").hidden = view !== "pvp";
   $("#activity").hidden = view !== "pvp";
+  if (view === "character") mountCurrentArmory?.();
 }
 
 function renderHonorProgress(character, guildSummary = null, guildName = null) {
@@ -119,7 +140,8 @@ function renderHonorProgress(character, guildSummary = null, guildName = null) {
   const isGuild = guildSummary !== null;
   const scope = isGuild ? "guild" : "character";
   panel.dataset.scope = scope;
-  const history = isGuild ? guildSummary.history : honorProgress([character]);
+  const rawHistory = isGuild ? guildSummary.history : honorProgress([scopedCharacter(character)]);
+  const history = rawHistory && selectedDay ? { ...rawHistory, ...dayBounds(selectedDay) } : rawHistory;
   panel.querySelector(".honor-scope").textContent = isGuild ? guildName : character.name;
   panel.querySelector(".honor-total").textContent = history ? `${count(history.total)} VH` : "—";
   panel.querySelector(".honor-note").textContent = history?.total === 0
@@ -153,6 +175,7 @@ async function load() {
   const response = await fetch(API_PATH + "/state");
   if (!response.ok) throw new Error("Impossible de charger les relevés.");
   state = await response.json();
+  allGroups = probableGroups(state.characters);
   if (!state.characters.some((item) => item.key === selectedKey))
     selectedKey = state.characters[0]?.key ?? null;
   readRoute();
@@ -166,12 +189,12 @@ function renderRoster() {
     const guilds = listGuilds(state.characters);
     $("#roster-count").textContent = guilds.length;
     $("#roster").replaceChildren();
-    for (const guild of guilds.filter((item) => `${item.name} ${item.realm}`.toLocaleLowerCase("fr").includes(query))) {
+    for (const guild of guilds.filter((item) => `${item.name} ${scopeLabel(item)}`.toLocaleLowerCase("fr").includes(query))) {
       const button = document.createElement("button");
       button.className = "roster-item";
       button.setAttribute("aria-pressed", String(guild.key === selectedGuild));
       const summary = summarizeGuild(state.characters, guild);
-      button.innerHTML = `${escape(guild.name)}<small>${escape(guild.realm)} · ${count(summary.currentMembers)} membre(s) suivi(s)</small>`;
+      button.innerHTML = `${escape(guild.name)}<small>${escape(scopeLabel(guild))} · ${count(summary.currentMembers)} membre(s) suivi(s)</small>`;
       button.addEventListener("click", () => navigate("guilds", guild.key));
       $("#roster").append(button);
     }
@@ -186,12 +209,12 @@ function renderRoster() {
   $("#roster-count").textContent = state.characters.length;
   $("#roster").replaceChildren();
   for (const character of roster.sort(
-    (a, b) => summarize(b).worldHK - summarize(a).worldHK,
+    (a, b) => summarize(scopedCharacter(b)).worldHK - summarize(scopedCharacter(a)).worldHK,
   )) {
     const button = document.createElement("button");
     button.className = "roster-item";
     button.setAttribute("aria-pressed", String(character.key === selectedKey));
-    button.innerHTML = `${escape(character.name)}<small>${escape(character.class ?? "Classe inconnue")} · ${count(summarize(character).worldHK)} VH observées</small>`;
+    button.innerHTML = `${escape(character.name)}<small>${escape(character.class ?? "Classe inconnue")} · ${count(summarize(scopedCharacter(character)).worldHK)} VH sur la période</small>`;
     button.addEventListener("click", () => {
       if (selectedKey === character.key) return;
       selectedMap = AZEROTH;
@@ -253,18 +276,19 @@ function progressChart(guild = false) {
 }
 
 function renderGuild() {
-  $("#activity").hidden = true;
+  $("#activity").hidden = false;
   const guilds = listGuilds(state.characters);
   const guild = guilds.find((item) => item.key === selectedGuild) ?? guilds[0];
   if (!guild) {
+    $("#activity").hidden = true;
     $("#profile").innerHTML = '<div class="empty"><p class="eyebrow">LES GUILDES</p><h2>Aucune guilde relevée.</h2><p>Importe les exports des membres pour ouvrir la fiche de leur guilde.</p></div>';
     return;
   }
   selectedGuild = guild.key;
   renderRoster();
-  const summary = summarizeGuild(state.characters, guild);
+  const summary = summarizeGuild(state.characters.map(scopedCharacter), guild);
   $("#profile").innerHTML = `<section class="guild-page" aria-labelledby="guild-title">
-    <div class="guild-heading"><div><p class="eyebrow">CARNET DE GUILDE · ${escape(guild.realm)}</p><h2 id="guild-title">&lt;${escape(guild.name)}&gt;</h2><p class="muted">Région ${escape(guild.region)} · ${escape(guild.ruleset === "unknown" ? "Règles non renseignées" : guild.ruleset)}</p></div><span class="guild-banner" aria-hidden="true">⚑</span></div>
+    <div class="guild-heading"><div><p class="eyebrow">CARNET DE GUILDE</p><h2 id="guild-title">&lt;${escape(guild.name)}&gt;</h2><p class="muted">${escape(scopeLabel(guild))}</p></div><span class="guild-banner" aria-hidden="true">⚑</span></div>
     <div class="metrics">
       <div class="metric"><strong>${count(summary.lifetimeHK)}</strong><span>VH cumulées · membres actuels suivis</span></div>
       <div class="metric"><strong>${count(summary.history?.total ?? 0)}</strong><span>VH gagnées en guilde · observées</span></div>
@@ -281,6 +305,12 @@ function renderGuild() {
     <p class="muted">Seuls les personnages dont les données ont été importées sont inclus. Les VH de groupe comptent pour chaque participant ; ce total représente les crédits de VH des membres, pas des victimes uniques. Les périodes sans collecte ne sont pas reconstituées.</p>
   </section>`;
   renderHonorProgress(null, summary, guild.name);
+  const events = summary.members.flatMap(({ character }) => {
+    const original = state.characters.find((item) => item.key === character.key);
+    return guildEvents(original, guild.name).filter((item) => item.context === "world" && ["honor-gain", "death", "player-kill"].includes(item.type))
+      .map((item) => ({ ...item, actor: original.name }));
+  }).sort((a, b) => a.at - b.at);
+  prepareActivity(events);
 }
 
 function navigate(view, key) {
@@ -290,21 +320,25 @@ function navigate(view, key) {
 }
 
 function readRoute() {
+  const previousKey = selectedKey;
+  const previousDirectory = directory;
   const params = new URLSearchParams(location.hash.slice(1));
   if (params.has("guild")) {
     directory = "guilds";
-    selectedGuild = params.get("guild");
+    selectedGuild = canonicalLinkKey(params.get("guild"));
   } else if (params.has("player")) {
     directory = "players";
-    selectedKey = params.get("player");
+    selectedKey = canonicalLinkKey(params.get("player"), "player");
   } else directory = "players";
   if (!state.characters.some((item) => item.key === selectedKey))
     selectedKey = state.characters[0]?.key ?? null;
+  if (directory === "players" && (selectedKey !== previousKey || previousDirectory !== "players")) profileView = "pvp";
   render();
 }
 
 function render() {
   hideEquipmentTooltip();
+  renderPeriod();
   $("#profile").setAttribute("aria-label", directory === "guilds" ? "Fiche guilde" : "Fiche personnage");
   renderRoster();
   if (directory === "guilds") {
@@ -313,7 +347,7 @@ function render() {
   }
   const character = state.characters.find((item) => item.key === selectedKey);
   if (!character) return;
-  const summary = summarize(character);
+  const summary = summarize(scopedCharacter(character));
   const latest = summary.latest;
   const guild = latest?.guild;
   $("#profile").innerHTML =
@@ -325,15 +359,17 @@ function render() {
       <div class="armory-identity-copy">
         <h2 id="armory-title">${escape(character.name)}</h2>
         <p class="armory-identity-meta">Niveau ${count(character.level)} · ${escape(character.race ?? "Race inconnue")} · ${escape(character.class ?? "Classe inconnue")}</p>
-        <p class="armory-affiliation">${guild ? `<a class="guild-link" href="#guild=${encodeURIComponent(guildKey(character, guild))}">&lt;${escape(guild)}&gt;</a> · ` : ""}${escape(character.realm)}</p>
-        <p class="armory-played" title="${escape(date(summary.playedAt))}">Temps de jeu · /played : <strong>${escape(formatPlayed(summary.playedSeconds))}</strong>${summary.playedAt == null ? " · à relever avec le nouvel addon" : ` · relevé le ${escape(date(summary.playedAt))}`}</p>
+        <p class="armory-affiliation">${guild ? `<a class="guild-link" href="#guild=${encodeURIComponent(guildKey(character, guild))}">&lt;${escape(guild)}&gt;</a> · ` : ""}${escape(scopeLabel(character))}</p>
       </div>
     </div>
-    <span class="armory-equipped">${count(latest?.equipment.length ?? 0)} / 19 pièces équipées</span>
+    <div class="armory-summary">
+      <div class="played-badge" tabindex="0" title="${summary.playedAt == null ? "Temps de jeu non relevé" : `Relevé le ${escape(date(summary.playedAt))}`}"><span>Temps de jeu</span><strong>${summary.playedSeconds == null ? "—" : escape(formatPlayed(summary.playedSeconds))}</strong></div>
+      <span class="armory-equipped">${count(latest?.equipment.length ?? 0)} / 19 pièces équipées</span>
+    </div>
     </div>
     <nav class="armory-tabs" aria-label="Vues de la fiche">
-      <button type="button" data-profile-view="character" aria-controls="armory-character">Personnage</button>
       <button type="button" data-profile-view="pvp" aria-controls="armory-pvp activity">Joueur contre joueur</button>
+      <button type="button" data-profile-view="character" aria-controls="armory-character">Personnage</button>
     </nav>
     ${armoryEquipment(latest)}
     <div id="armory-pvp" hidden>
@@ -351,11 +387,16 @@ function render() {
       </details>
     </section>
     <div class="metrics"><div class="metric"><strong>${count(summary.lifetimeHK)}</strong><span>VH cumulées · tous contextes</span></div><div class="metric"><strong>${count(summary.worldHK)}</strong><span>VH observées · monde ouvert</span></div><div class="metric"><strong>${count(summary.deaths)}</strong><span>Morts observées · monde ouvert</span></div><div class="metric"><strong>${summary.delta == null ? "—" : "+" + count(summary.delta)}</strong><span>Écart du compteur · tous contextes</span></div></div>
-    <p class="muted">Compteur relevé le ${escape(date(summary.counterAt))}. Dernier import le ${escape(date(character.lastImportedAt))}. Règles de jeu ${escape(character.ruleset === "unknown" ? "non renseignées" : character.ruleset)}. ${count(summary.kills)} coup${summary.kills === 1 ? "" : "s"} fatal${summary.kills === 1 ? "" : "s"} observé${summary.kills === 1 ? "" : "s"} en monde ouvert (toi ou ton familier).</p>
+    <p class="muted">Compteur relevé le ${escape(date(summary.counterAt))}. Dernier import le ${escape(date(character.lastImportedAt))}. ${escape(scopeLabel(character))}. ${count(summary.kills)} coup${summary.kills === 1 ? "" : "s"} fatal${summary.kills === 1 ? "" : "s"} observé${summary.kills === 1 ? "" : "s"} en monde ouvert (toi ou ton familier).</p>
     ${progressChart()}
     </div>
     </section>`;
-  mountArmory($(".armory"), character, latest);
+  let mounted = false;
+  mountCurrentArmory = () => {
+    if (mounted) return;
+    mounted = true;
+    mountArmory($(".armory"), character, latest);
+  };
   bindEquipmentTooltips($("#profile"), latest?.equipment ?? []);
   for (const button of $(".armory").querySelectorAll("[data-profile-view]")) {
     button.addEventListener("click", () => setProfileView(button.dataset.profileView));
@@ -363,7 +404,13 @@ function render() {
   renderHonorProgress(character);
   for (const icon of $("#profile").querySelectorAll(".item-icon img"))
     icon.addEventListener("error", () => icon.remove(), { once: true });
-  selectedEvents = summary.events;
+  setProfileView(profileView);
+  prepareActivity(summarize(character).events);
+}
+
+function prepareActivity(events) {
+  activityEvents = events;
+  selectedEvents = filterDay(events, selectedDay);
   const zones = groupZones(selectedEvents);
   mapNames = new Map([...mapRegions].map(([id, region]) => [id, region.name]));
   for (const zone of zones) {
@@ -377,7 +424,6 @@ function render() {
     .sort((a, b) => a[1].localeCompare(b[1], "fr"));
   for (const [id, name] of regions) picker.add(new Option(name, id));
   if (!mapNames.has(selectedMap)) selectedMap = AZEROTH;
-  setProfileView(profileView);
   selectMap(selectedMap);
 }
 function renderZones(events) {
@@ -391,6 +437,31 @@ function renderZones(events) {
         .join("")
     : '<p class="muted">Aucun événement pour cette sélection.</p>';
 }
+
+function renderDailyActivity() {
+  const events = filterDeaths(activityEvents, $("#death-filter").value).filter((item) =>
+    selectedMap === AZEROTH || mapContains(selectedMap, String(item.location?.mapId ?? "unknown")));
+  const days = dailyActivity(events, activityOrder);
+  const max = Math.max(1, ...days.map((item) => item.hk));
+  $("#daily-rows").innerHTML = days.length ? days.map((item) => `<button type="button" class="day-row" data-day="${item.day}" aria-pressed="${item.day === selectedDay}">
+    <span class="day-date">${escape(dayLabel(item.day))}</span><svg class="day-meter" aria-hidden="true" viewBox="0 0 100 4" preserveAspectRatio="none"><rect class="day-track" width="100" height="4"/><rect class="day-bar" width="${Math.round(item.hk / max * 100)}" height="4"/></svg>
+    <strong>${count(item.hk)} VH</strong><small>${count(item.kills)} coup(s) fatal(s) · ${count(item.deaths)} mort(s)</small></button>`).join("")
+    : '<p class="muted">Aucune activité en monde ouvert sur cette carte.</p>';
+}
+
+function renderEncounters() {
+  visibleGroups = allGroups.filter((group) =>
+    (directory === "guilds" ? group.guildKey === selectedGuild : group.members.some((member) => member.key === selectedKey))
+    && (!selectedDay || dayKey(group.start) === selectedDay)
+    && (selectedMap === AZEROTH || mapContains(selectedMap, String(group.mapId))));
+  $("#encounters-count").textContent = `${count(visibleGroups.length)} séquence(s)${visibleGroups.length > 12 ? " · 12 plus récentes affichées" : ""}`;
+  $("#encounters").innerHTML = visibleGroups.length ? visibleGroups.slice(0, 12).map((group, index) => `<article class="encounter-card">
+    <div class="encounter-heading"><span class="encounter-tag">Groupe probable</span><time>${escape(date(group.start))}</time></div>
+    <h4>${escape(group.zone)}</h4><p class="encounter-reading"><strong>${count(group.members.length)} membres</strong><span>+${count(group.hk)} VH créditées · ${count(group.kills)} coup(s) fatal(s)</span></p>
+    <p class="encounter-members">${group.members.map((member) => `<a href="#player=${encodeURIComponent(member.key)}">${escape(member.name)}</a>`).join(" · ")}</p>
+    <div class="encounter-footer"><small>${Math.max(1, group.end - group.start)} s · ${count(group.observations)} observation(s)</small><button type="button" data-encounter="${index}">Voir sur la carte ↗</button></div>
+    </article>`).join("") : '<p class="muted encounter-empty">Aucun groupe probable sur cette sélection. Deux membres avec des positions proches sont nécessaires ; importer leurs relevés permet de les rapprocher.</p>';
+}
 function selectMap(mapId) {
   selectedMap = mapId;
   $("#map-filter").value = mapId;
@@ -403,21 +474,22 @@ function selectMap(mapId) {
       mapId === AZEROTH ||
       mapContains(mapId, String(item.location?.mapId ?? "unknown")),
   );
+  renderDailyActivity();
+  renderEncounters();
   renderEvents(events);
   renderMap(events);
 }
 function renderEvents(events) {
   $("#events").innerHTML =
-    events
-      .slice(-200)
-      .reverse()
+    sortActivity(events, activityOrder)
+      .slice(0, 200)
       .map((item) => {
         const location = item.location;
         const position =
           location?.x == null
             ? "Indisponible"
             : `${(location.x * 100).toFixed(1)}, ${(location.y * 100).toFixed(1)} · ${item.at - location.at}s avant`;
-        return `<tr><td>${escape(date(item.at))}</td><td>${escape(eventLabel(item))}</td><td>${escape(location?.zone ?? "Zone inconnue")}</td><td>${escape(position)}</td></tr>`;
+        return `<tr><td>${escape(date(item.at))}</td><td>${item.actor ? `<b>${escape(item.actor)}</b> · ` : ""}${escape(eventLabel(item))}</td><td>${escape(location?.zone ?? "Zone inconnue")}</td><td>${escape(position)}</td></tr>`;
       })
       .join("") ||
     '<tr><td colspan="4">Aucun événement pour cette sélection.</td></tr>';
@@ -516,12 +588,45 @@ function renderMap(events) {
     }
     map.append(marker);
   }
+  for (const group of visibleGroups) {
+    const position = projectPosition({ mapId: group.mapId, x: group.x, y: group.y }, mapId);
+    if (!position) continue;
+    const ring = svgElement("circle", { class: "map-group", cx: position.x * 150, cy: position.y * 100, r: 2.2 });
+    const title = svgElement("title", {});
+    title.textContent = `Groupe probable · ${group.members.map((member) => member.name).join(", ")} · ${date(group.start)}`;
+    ring.append(title);
+    map.append(ring);
+  }
 }
 const openImport = () => {
   $("#import-error").textContent = "";
   $("#import-dialog").showModal();
 };
 $("#death-filter").addEventListener("change", () => selectMap(selectedMap));
+$("#day-filter").addEventListener("change", () => {
+  selectedDay = $("#day-filter").value;
+  render();
+});
+$("#event-sort").addEventListener("change", () => {
+  activityOrder = $("#event-sort").value;
+  selectMap(selectedMap);
+});
+$("#daily-rows").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-day]");
+  if (!button) return;
+  selectedDay = selectedDay === button.dataset.day ? "" : button.dataset.day;
+  render();
+});
+$("#encounters").addEventListener("click", (event) => {
+  const button = event.target.closest("[data-encounter]");
+  if (!button) return;
+  const group = visibleGroups[Number(button.dataset.encounter)];
+  selectedMap = String(group.mapId);
+  selectedDay = dayKey(group.start);
+  if (directory === "players") profileView = "pvp";
+  render();
+  $("#map-current").scrollIntoView({ block: "center", behavior: "smooth" });
+});
 $("#open-import").addEventListener("click", openImport);
 $("#empty-import").addEventListener("click", openImport);
 $("#close-import").addEventListener("click", () => $("#import-dialog").close());
