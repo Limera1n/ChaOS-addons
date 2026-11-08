@@ -136,7 +136,7 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.11.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.12.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
@@ -238,6 +238,12 @@ fois chaque équipement distinct dans `equipmentSets`. Chaque relevé utilise
 un `equipmentRef` indexé à partir de zéro. Le serveur reconstruit les mêmes
 objets avant validation et sauvegarde ; l’historique local n’est pas modifié.
 Les infobulles complètes restent limitées à l’équipement actuel.
+Depuis **0.5.12**, le réimport tolère jusqu’à `1e-10` d’écart sur les coordonnées
+normalisées X/Y d’une observation déjà enregistrée, pour absorber les écarts
+de dernière décimale entre sérialiseurs Lua/JSON. Les coordonnées originales
+restent conservées. Les identifiants, dates, carte, zone, VH et autres champs
+restent comparés strictement ; un vrai conflit annule l’import entier et
+indique désormais l’identifiant de l’événement ou du relevé concerné.
 **Mettre le site à jour avant l’addon 0.5.9** : les anciens sites ne lisent pas
 les références d’équipement. Les anciens exports complets restent acceptés
 par le nouveau site.

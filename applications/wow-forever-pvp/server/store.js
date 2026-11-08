@@ -34,6 +34,17 @@ function fillSnapshotMetadata(item, other) {
 
 function reconcileObservation(previous, candidate, kind) {
   const comparable = { ...previous, build: candidate.build, addonVersion: candidate.addonVersion };
+  // Lua/JSON versions can differ in the last decimal places of normalized map
+  // coordinates. Compare within 1e-10, retaining the original stored reading.
+  // Map, zone, position timestamp and every non-coordinate field remain exact.
+  if (previous.location && candidate.location) {
+    comparable.location = { ...previous.location };
+    for (const axis of ["x", "y"]) {
+      const before = previous.location[axis], after = candidate.location[axis];
+      if (Number.isFinite(before) && Number.isFinite(after) && Math.abs(before - after) <= 1e-10)
+        comparable.location[axis] = after;
+    }
+  }
   if (isDeepStrictEqual(comparable, candidate)) return previous;
   if (kind === "snapshots") {
     const enriched = fillSnapshotMetadata(comparable, candidate);
@@ -44,7 +55,7 @@ function reconcileObservation(previous, candidate, kind) {
         ...(enriched.playedSeconds == null ? {} : { playedSeconds: enriched.playedSeconds, playedAt: enriched.playedAt }) };
     }
   }
-  throw new Error("Conflit : un événement déjà importé a été modifié.");
+  throw new Error(`Conflit : ${kind === "snapshots" ? "le relevé" : "l’événement"} ${candidate.id} déjà importé a été modifié.`);
 }
 
 const observationOrder = (a, b) => a.at - b.at || a.sourceKey.localeCompare(b.sourceKey);
