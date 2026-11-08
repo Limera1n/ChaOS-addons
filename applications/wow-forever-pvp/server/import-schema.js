@@ -74,6 +74,14 @@ function location(value) {
   return result;
 }
 
+function playedTime(item) {
+  if (item.playedSeconds == null && item.playedAt == null) return {};
+  const playedSeconds = integer(item.playedSeconds);
+  const playedAt = integer(item.playedAt);
+  if (playedAt > item.at) fail();
+  return { playedSeconds, playedAt };
+}
+
 // Rebuild every object rather than persisting arbitrary keys from an untrusted export.
 export function validateImport(input) {
   record(input);
@@ -113,6 +121,7 @@ export function validateImport(input) {
   }
   result.snapshots = list(input.snapshots, 300).map((item) => ({
     ...identity(item),
+    ...playedTime(item),
     lifetimeHK:
       item.lifetimeHK == null ? null : integer(item.lifetimeHK, 1000000000),
     ...(item.honorPoints == null ? {} : { honorPoints: integer(item.honorPoints, 100000000) }),
@@ -124,6 +133,7 @@ export function validateImport(input) {
       return {
         slot: slotId,
         itemId: integer(slot.itemId, 1000000000),
+        ...(slot.transmogItemId == null ? {} : { transmogItemId: integer(slot.transmogItemId, 1000000000) }),
         link: optionalString(slot.link, 2048),
         ...(slot.icon == null ? {} : { icon: integer(slot.icon, 1000000000) }),
         ...(slot.quality == null ? {} : { quality: integer(slot.quality, 8) }),
@@ -153,6 +163,7 @@ export function validateImport(input) {
       "honor-points-gain",
       "honor-points-loss",
       "death",
+      "player-kill",
       "session-start",
       "session-end",
       "counter-reset",
@@ -175,6 +186,8 @@ export function validateImport(input) {
         "unknown",
       ]),
       cause,
+      ...(type === "player-kill" && item.victim != null ? { victim: string(item.victim) } : {}),
+      ...(type === "player-kill" && item.byPet === true ? { byPet: true } : {}),
       ...(cause !== "unknown" && item.source != null ? { source: string(item.source) } : {}),
       location: eventLocation,
     };

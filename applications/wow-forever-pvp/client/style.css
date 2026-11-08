@@ -271,10 +271,22 @@ select {
   margin: 0;
   font: 22px Georgia, serif;
 }
-.honor-switch {
+.honor-switch,
+.directory-tabs {
   display: flex;
   gap: 3px;
 }
+.directory-tabs { margin: 12px 0 18px; gap: 8px; }
+.directory-tabs button { background: transparent; color: var(--muted); border-color: var(--line); }
+.directory-tabs button[aria-pressed="true"] { background: var(--accent); color: #1a2411; border-color: var(--accent); }
+.guild-link, .guild-members a { color: #e9be7b; text-underline-offset: 4px; }
+.guild-heading { display: flex; justify-content: space-between; gap: 24px; align-items: center; border-bottom: 1px solid #67563c; padding-bottom: 20px; }
+.guild-heading h2 { font-size: clamp(30px, 4vw, 48px); overflow-wrap: anywhere; color: #f0d6aa; }
+.guild-heading .eyebrow { color: #d0af75; }
+.guild-banner { font: 76px Georgia, serif; color: #e9be7b; padding: 0 12px; }
+.guild-page .metric strong { color: #e9be7b; }
+.guild-members small { display: block; color: var(--muted); margin-top: 5px; }
+.armory-identity-copy .armory-played { font-size: 12px; color: #d4c3a5; }
 .honor-switch button {
   padding: 6px 10px;
   color: var(--muted);

@@ -10,13 +10,24 @@ function fillEquipmentMetadata(equipment, otherEquipment) {
     const icon = item.icon ?? other?.icon;
     const quality = item.quality ?? other?.quality;
     const tooltip = item.tooltip ?? other?.tooltip;
+    const transmogItemId = item.transmogItemId ?? other?.transmogItemId;
     return {
       ...item,
       ...(icon == null ? {} : { icon }),
       ...(quality == null ? {} : { quality }),
       ...(tooltip == null ? {} : { tooltip }),
+      ...(transmogItemId == null ? {} : { transmogItemId }),
     };
   });
+}
+
+function fillSnapshotMetadata(item, other) {
+  return {
+    ...item,
+    equipment: fillEquipmentMetadata(item.equipment, other.equipment),
+    ...(item.playedSeconds == null && other.playedSeconds != null
+      ? { playedSeconds: other.playedSeconds, playedAt: other.playedAt } : {}),
+  };
 }
 
 export function createTrackerStore({ dataDir, now = Date.now }) {
@@ -83,13 +94,14 @@ export function createTrackerStore({ dataDir, now = Date.now }) {
           if (JSON.stringify(previousAtCurrentVersion) === JSON.stringify(candidate)) continue;
           if (kind === "snapshots") {
             // Older importers discarded these optional fields from otherwise identical observations.
-            const equipment = fillEquipmentMetadata(previous.equipment, candidate.equipment);
-            const incomingEquipment = fillEquipmentMetadata(candidate.equipment, previous.equipment);
-            if (isDeepStrictEqual(
-              { ...previousAtCurrentVersion, equipment },
-              { ...candidate, equipment: incomingEquipment },
-            )) {
-              previous.equipment = equipment;
+            const enriched = fillSnapshotMetadata(previousAtCurrentVersion, candidate);
+            const incoming = fillSnapshotMetadata(candidate, previous);
+            if (isDeepStrictEqual(enriched, incoming)) {
+              previous.equipment = enriched.equipment;
+              if (enriched.playedSeconds != null) {
+                previous.playedSeconds = enriched.playedSeconds;
+                previous.playedAt = enriched.playedAt;
+              }
               continue;
             }
           }

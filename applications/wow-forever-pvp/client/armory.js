@@ -54,8 +54,12 @@ export function armoryParams(race, sex, equipment, appearance) {
   const gear = slots.flatMap((slot, index) => {
     const item = items.get(slot);
     if (!Number.isSafeInteger(item?.itemId) || item.itemId <= 0) return [];
+    // Zero is an explicitly hidden appearance. Older exports use the equipped item.
+    const visualItemId = Number.isSafeInteger(item.transmogItemId) && item.transmogItemId >= 0
+      ? item.transmogItemId : item.itemId;
+    if (!visualItemId) return [];
     const enchant = itemEnchant(item);
-    return [`${"abcdefghijklmnopqrs"[index]}${item.itemId}${enchant ? `e${enchant}` : ""}`];
+    return [`${"abcdefghijklmnopqrs"[index]}${visualItemId}${enchant ? `e${enchant}` : ""}`];
   });
   const params = new URLSearchParams({ r: race, a: sex === 3 ? "1" : "0" });
   if (appearance?.raceId === race && appearance.sex === sex) {

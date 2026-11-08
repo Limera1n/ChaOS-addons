@@ -1,3 +1,7 @@
+export function killLabel(item) {
+  return `Joueur tué · ${item.victim ?? "nom indisponible"} · coup fatal${item.byPet ? " du familier" : " personnel"}`;
+}
+
 export function summarize(character) {
   const latest = character.snapshots.at(-1);
   const first = character.snapshots.find((item) => item.lifetimeHK != null);
@@ -6,11 +10,14 @@ export function summarize(character) {
   );
   const world = character.events.filter((item) => item.context === "world");
   const lastHonor = character.snapshots.findLast((item) => item.honorPoints != null);
+  const lastPlayed = character.snapshots.findLast((item) => item.playedSeconds != null);
   const honorEvents = character.events.filter((item) =>
     item.type === "honor-points-gain" || item.type === "honor-points-loss");
   const honorKnown = lastHonor != null || honorEvents.length > 0;
   return {
     latest,
+    playedSeconds: lastPlayed?.playedSeconds ?? null,
+    playedAt: lastPlayed?.playedAt ?? null,
     honorPoints: lastHonor?.honorPoints ?? null,
     honorAt: lastHonor?.at ?? null,
     honorGained: honorKnown ? honorEvents.reduce((sum, item) => sum + (item.type === "honor-points-gain" ? item.amount : 0), 0) : null,
@@ -37,8 +44,9 @@ export function summarize(character) {
       0,
     ),
     deaths: world.filter((item) => item.type === "death").length,
+    kills: world.filter((item) => item.type === "player-kill").length,
     events: world.filter(
-      (item) => item.type === "honor-gain" || item.type === "death",
+      (item) => item.type === "honor-gain" || item.type === "death" || item.type === "player-kill",
     ),
   };
 }
@@ -56,15 +64,17 @@ export function groupZones(events) {
       name: event.location?.zone ?? "Zone inconnue",
       hk: 0,
       deaths: 0,
+      kills: 0,
     };
     if (event.type === "honor-gain") zone.hk += event.amount;
     if (event.type === "death") zone.deaths++;
+    if (event.type === "player-kill") zone.kills++;
     zones.set(key, zone);
   }
   return [...zones.values()].sort((a, b) => b.hk - a.hk || b.deaths - a.deaths);
 }
 
-export function honorProgress(characters, guild = null) {
+export function honorProgress(characters, guild = null, context = "world") {
   const gains = new Map();
   let start = Infinity;
   let end = -Infinity;
@@ -85,7 +95,7 @@ export function honorProgress(characters, guild = null) {
         if (snapshots[next - 1]?.guild !== guild) continue;
       }
       observe(event.at);
-      if (event.type === "honor-gain" && event.context === "world")
+      if (event.type === "honor-gain" && (context === "all" || event.context === context))
         gains.set(event.at, (gains.get(event.at) ?? 0) + event.amount);
     }
   }
@@ -96,6 +106,47 @@ export function honorProgress(characters, guild = null) {
     return { at, total };
   });
   return { start, end, points, total };
+}
+
+export function formatPlayed(seconds) {
+  if (seconds == null) return "Non relevé";
+  return `${Math.floor(seconds / 86400).toLocaleString("fr-FR")} j ${Math.floor(seconds % 86400 / 3600)} h ${Math.floor(seconds % 3600 / 60)} min`;
+}
+
+export function guildKey(character, name) {
+  return JSON.stringify([character.region, character.ruleset, character.realm, name]);
+}
+
+export function listGuilds(characters) {
+  const guilds = new Map();
+  for (const character of characters) {
+    for (const snapshot of character.snapshots) {
+      if (!snapshot.guild) continue;
+      const key = guildKey(character, snapshot.guild);
+      guilds.set(key, { key, name: snapshot.guild, realm: character.realm, region: character.region, ruleset: character.ruleset });
+    }
+  }
+  return [...guilds.values()].sort((a, b) => a.name.localeCompare(b.name, "fr") || a.realm.localeCompare(b.realm, "fr"));
+}
+
+export function summarizeGuild(characters, guild) {
+  const peers = characters.filter((character) =>
+    character.region === guild.region && character.realm === guild.realm && character.ruleset === guild.ruleset);
+  const members = peers.filter((character) => character.snapshots.some((snapshot) => snapshot.guild === guild.name)).map((character) => ({
+    character,
+    current: character.snapshots.at(-1)?.guild === guild.name,
+    lifetimeHK: summarize(character).lifetimeHK,
+    history: honorProgress([character], guild.name, "all"),
+    worldHistory: honorProgress([character], guild.name),
+  })).sort((a, b) => b.history.total - a.history.total || a.character.name.localeCompare(b.character.name, "fr"));
+  const currentMembers = members.filter((member) => member.current);
+  const knownCounters = currentMembers.filter((member) => member.lifetimeHK != null);
+  return {
+    members, currentMembers: currentMembers.length, knownCounters: knownCounters.length,
+    lifetimeHK: knownCounters.length ? knownCounters.reduce((sum, member) => sum + member.lifetimeHK, 0) : null,
+    history: honorProgress(peers, guild.name, "all"),
+    worldHistory: honorProgress(peers, guild.name),
+  };
 }
 
 const linkColors = ["9d9d9d", "ffffff", "1eff00", "0070dd", "a335ee", "ff8000", "e6cc80", "00ccff", "00ccff"];

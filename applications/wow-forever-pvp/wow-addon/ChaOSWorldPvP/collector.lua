@@ -2,6 +2,8 @@ local ns = ChaOSWorldPvP
 local frame = CreateFrame("Frame")
 local db, profile, baseline, lastLocation, exportFrame
 local honorBaseline
+local pendingExport
+local recentKills = {}
 local isDead, elapsed = false, 0
 local pendingDeath, lastFatalTimestamp
 local recapRetryDelays = { 0.3, 0.7, 1 }
@@ -74,6 +76,35 @@ local function event(kind, amount, eventContext, location)
     }
     append("events", item, 5000)
     return item
+end
+local function observeKill(attackerValue, targetValue)
+    -- PARTY_KILL is separate from the restricted combat-log stream. Its
+    -- identities can still be secret: discard them before comparing anything.
+    local attacker = text(read(function() return attackerValue end))
+    local target = text(read(function() return targetValue end))
+    local player = text(read(UnitGUID, "player"))
+    local pet = text(read(UnitGUID, "pet"))
+    if not attacker or not target or not player or target == player
+        or not target:match("^Player%-") then return end
+    if attacker ~= player and (not pet or attacker ~= pet) then return end
+    local at = now()
+    for guid, previous in pairs(recentKills) do
+        if at - previous > 1 then recentKills[guid] = nil end
+    end
+    if recentKills[target] then return end
+    recentKills[target] = at
+    local victim = read(function()
+        if type(UnitNameFromGUID) ~= "function" then return nil end
+        local name, realm = UnitNameFromGUID(target)
+        name = text(read(function() return name end))
+        realm = text(read(function() return realm end))
+        if not name or name == UNKNOWNOBJECT then return nil end
+        if realm then name = name .. "-" .. realm end
+        if #name <= 160 and not name:find("[%z\1-\31]") then return name end
+    end)
+    local item = event("player-kill", 0, context(), position())
+    item.victim = victim
+    item.byPet = attacker == pet or nil
 end
 local function classifyHit(hit)
     local kind = read(function() return hit.event end)
@@ -161,6 +192,26 @@ local function equippedTooltip(slot)
         if #result > 0 then return result end
     end)
 end
+local function transmogItem(slot, itemId)
+    return read(function()
+        if not C_Transmog or not Enum or not Enum.TransmogType or not Enum.TransmogModification then return nil end
+        local info = read(C_Transmog.GetSlotVisualInfo, {
+            slotID = slot, type = Enum.TransmogType.Appearance,
+            modification = Enum.TransmogModification.Main,
+        })
+        if type(info) ~= "table" then return nil end
+        -- Pending choices belong to the NPC preview, not the equipped appearance.
+        local source = number(read(function() return info.appliedSourceID end))
+        if not source then return nil end
+        if source == 0 then return itemId end
+        local visual = number(read(function() return info.appliedVisualID end))
+        if visual and read(C_TransmogCollection and C_TransmogCollection.IsAppearanceHiddenVisual, visual) == true then
+            return 0
+        end
+        local applied = number(read(C_Transmog.GetItemIDForSource, source))
+        if applied and applied > 0 and applied % 1 == 0 and applied <= 1000000000 then return applied end
+    end)
+end
 local function equipment()
     local items = ns.Array()
     for slot = 1, 19 do
@@ -170,6 +221,7 @@ local function equipment()
             local quality = number(read(C_Item and C_Item.GetItemQualityByID, itemId))
             items[#items + 1] = {
                 slot = slot, itemId = itemId, link = text(read(GetInventoryItemLink, "player", slot)),
+                transmogItemId = transmogItem(slot, itemId),
                 icon = icon and icon > 0 and icon or nil,
                 quality = quality and quality <= 8 and quality or nil,
             }
@@ -240,6 +292,8 @@ local function snapshot()
     end
     append("snapshots", {
         id = nextId(), at = now(), lifetimeHK = number(read(GetPVPLifetimeStats)),
+        playedSeconds = profile.played and profile.played.seconds,
+        playedAt = profile.played and profile.played.at,
         honorPoints = honorPoints(),
         guild = text(read(GetGuildInfo, "player")), equipment = equipment(),
     }, 300)
@@ -297,11 +351,14 @@ local function initialize()
     -- Session boundaries never infer gains from the offline interval.
     baseline, lastLocation, pendingDeath, lastFatalTimestamp = nil, nil, nil, nil
     honorBaseline = nil
+    recentKills = {}
     barberSession = nil
+    pendingExport = nil
     isDead = read(UnitIsDeadOrGhost, "player") == true
     sample()
     snapshot()
     event("session-start")
+    read(RequestTimePlayed)
 end
 local function showExport()
     captureAppearance()
@@ -345,11 +402,36 @@ local function showExport()
     exportFrame.edit:HighlightText()
     if profile.dropped then print("ChaOS PvP: local retention limit reached; older observations omitted: " .. profile.dropped) end
 end
+local function requestExport()
+    sample()
+    local request = {}
+    pendingExport = request
+    read(RequestTimePlayed)
+    -- TIME_PLAYED_MSG is asynchronous. Keep exporting possible if the API is
+    -- absent or the server does not reply, using the last dated measurement.
+    local function finish()
+        if pendingExport ~= request then return end
+        pendingExport = nil
+        showExport()
+    end
+    if C_Timer and C_Timer.After then C_Timer.After(2, finish) else finish() end
+end
 frame:SetScript("OnEvent", function(_, name, ...)
     if name == "PLAYER_LOGIN" then initialize(); return end
     if not profile or not db then return end
     local success = ...
-    if name == "CURRENCY_DISPLAY_UPDATE" then
+    if name == "TIME_PLAYED_MSG" then
+        local seconds = number(read(function() return success end))
+        if seconds and seconds % 1 == 0 and seconds <= 4102444800 then
+            profile.played = { seconds = seconds, at = now() }
+            if pendingExport then pendingExport = nil; showExport()
+            else snapshot() end
+        end
+    elseif name == "PLAYER_GUILD_UPDATE" then
+        if read(function() return success end) == "player" then sample(); snapshot() end
+    elseif name == "PARTY_KILL" then
+        observeKill(...)
+    elseif name == "CURRENCY_DISPLAY_UPDATE" then
         sample()
     elseif name == "BARBER_SHOP_OPEN" then
         local session = {}
@@ -389,6 +471,9 @@ for _, name in ipairs({ "BARBER_SHOP_OPEN", "BARBER_SHOP_CLOSE", "BARBER_SHOP_RE
     pcall(frame.RegisterEvent, frame, name)
 end
 frame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
+frame:RegisterEvent("PARTY_KILL")
+frame:RegisterEvent("TIME_PLAYED_MSG")
+frame:RegisterEvent("PLAYER_GUILD_UPDATE")
 -- Forever blocks combat-log event registration. pcall cannot prevent the
 -- protected-action warning, so use the death recap without probing this event.
 frame:SetScript("OnUpdate", function(_, delta)
@@ -413,7 +498,7 @@ SlashCmdList.CHAOSWORLDPVP = function(message)
     if not profile or not db then print("ChaOS PvP: collector unavailable."); return end
     if message == "export" then
         if pendingDeath then print("ChaOS PvP: death recap pending. Try /cvp export in two seconds."); return end
-        sample(); showExport()
+        requestExport()
     elseif message == "honor" then
         showHonor()
     elseif message == "appearance" then

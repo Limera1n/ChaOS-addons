@@ -18,6 +18,7 @@ export function createLocalServer({
     [
       ["/", ["index.html", "text/html; charset=utf-8"]],
       ["/app.js", ["app.js", "text/javascript; charset=utf-8"]],
+      ["/desktop-cursor.js", ["desktop-cursor.js", "text/javascript; charset=utf-8"]],
       ["/style.css", ["style.css", "text/css; charset=utf-8"]],
       ["/model.js", ["model.js", "text/javascript; charset=utf-8"]],
       ["/map-regions.js", ["map-regions.js", "text/javascript; charset=utf-8"]],

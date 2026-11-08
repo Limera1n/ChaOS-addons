@@ -107,15 +107,62 @@ visibles que par leur différence nette. Les anciens exports restent importables
 mais n’inventent pas d’historique d’honneur. Mettre à jour le site et le collecteur
 ensemble pour que l’import reconnaisse les nouveaux événements.
 
+### Joueurs tués (collecteur 0.5.6)
+
+Le journal et la carte affichent les coups fatals personnels avec la victime :
+« Joueur tué · Nom-Royaume · coup fatal personnel », ou « du familier » pour
+ton propre familier. Le collecteur utilise l’événement `PARTY_KILL` et
+`UnitNameFromGUID`, documentés dans les
+[API du client Forever](https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/UnitDocumentation.lua),
+sans se réabonner au journal de combat bloqué.
+
+Un coup fatal donné par un autre membre du groupe n’est pas attribué au
+personnage suivi. Les PNJ et familiers ennemis sont exclus. Une identité
+protégée est ignorée ; si seul le nom manque, le journal affiche « nom
+indisponible ». La cible actuellement sélectionnée ne sert jamais à deviner
+la victime.
+
+Les VH continuent à provenir du compteur du jeu et peuvent inclure des
+participations. Les coups fatals sont des événements séparés, sans ajouter
+une seconde VH. Le losange de la carte et le compteur par zone distinguent
+les joueurs tués des VH. Les anciens exports ne contiennent pas les noms
+des victimes : mettre à jour le site et l’addon, puis exporter après de
+nouveaux combats. La réception de l’événement et la lisibilité des noms
+restent à confirmer dans le client utilisé.
+
 Le `.toc` cible l'interface `16001`, identifiée pendant la recherche. Vérifier
 la version du client avant de considérer l'addon compatible. Les API absentes
 ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.5.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.7.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
+
+## Profils, guildes et temps de jeu
+
+Les onglets **Joueurs** et **Guildes** ouvrent des pages distinctes, avec des
+liens directs partageables. Le nom de guilde sur un profil ouvre sa fiche ;
+chaque contribution renvoie au personnage correspondant.
+
+La page de guilde réunit les personnages importés du même serveur, de la même
+région et des mêmes règles de jeu. Elle affiche les compteurs de VH cumulées
+des membres actuels suivis, les gains observés pendant l’appartenance à la
+guilde (tous contextes), leur part en monde ouvert et les contributions par
+personnage. Les anciens membres restent dans l’historique des contributions.
+Les crédits de VH sont additionnés par participant, sans les présenter comme
+des victimes uniques. Les membres sans export ne sont pas inventés.
+
+Le profil affiche le `/played` total en jours, heures et minutes, avec la date
+de mesure. Le collecteur le demande à la connexion et avant l’export via
+`RequestTimePlayed`, puis lit `TIME_PLAYED_MSG`. L’export attend la réponse
+jusqu’à deux secondes ; en cas d’indisponibilité, il conserve la dernière
+mesure datée. Les anciens exports affichent « Non relevé ».
+
+L’étude du compagnon d’envoi automatique est dans
+[docs/wow-forever-sync.md](../../docs/wow-forever-sync.md). Aucun envoi automatique
+n’est activé par cette version.
 
 ## Diagnostiquer une action bloquée en jeu
 
@@ -167,7 +214,8 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
 - Export JSON versionné d'un personnage : identité, guilde au relevé, équipement
   par emplacement et VH cumulées si lisibles.
 - Échantillonnage du compteur toutes les deux secondes : gains de VH par contexte,
-  sessions et détection d'une baisse du compteur. Pas d'identification de victime.
+  sessions et détection d'une baisse du compteur. Victimes des coups fatals
+  personnels ou du familier relevées séparément quand leur identité est lisible.
 - Morts personnelles avec position si disponible. Le récapitulatif de WoW
   Forever peut fournir le coup fatal et sa source. Le journal distingue les
   morts PvP, PvE, environnementales et auto-infligées.
@@ -213,9 +261,15 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
   prévue pour un seul processus ; ne pas lancer plusieurs instances sur le même
   fichier. Pas de fusion automatique de plusieurs installations d'un personnage.
 - Le portrait reprend les choix capturés au barbier et reconnus par le modèle.
+  Les nouveaux exports relèvent aussi les transmogrifications appliquées et les
+  pièces masquées, sans modifier les objets des infobulles. Après mise à jour
+  de l’addon en jeu, refaire `/cvp export` puis importer le résultat sur le site.
+  Les anciens exports utilisent les objets équipés. La collecte utilise
+  [l’API transmog du client Forever](https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/TransmogDocumentation.lua)
+  et reste à valider en jeu.
   Les choix sans équivalent HD/SD et les objets sans modèle sont signalés.
   Un relevé sans capture du barbier utilise l’apparence par défaut.
-- Rang, points de rang, talents et adversaires des VH restent à
+- Rang, points de rang, talents et victimes des simples participations restent à
   implémenter après vérification des API et sources de ressources.
 
 ## Vérifier

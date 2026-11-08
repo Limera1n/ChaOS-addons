@@ -6,8 +6,9 @@ local barberSex, barberChoice, barberDirty = 0, 2, false
 local frames = {}
 local combatLogRegistrations = 0
 local function widget()
-    local value = { scripts = {} }
+    local value = { scripts = {}, registered = {} }
     function value:RegisterEvent(name)
+        self.registered[name] = true
         if name == "COMBAT_LOG_EVENT_UNFILTERED" then
             combatLogRegistrations = combatLogRegistrations + 1
             error("Protected event registration")
@@ -58,6 +59,15 @@ function GetBuildInfo() return "1.60.1", "test-build" end
 function IsInInstance() return instance ~= "none", instance end
 local secret = {}
 function issecretvalue(value) return value == secret end
+local playerGUID = "Player-0-me"
+function UnitGUID(unit)
+    if unit == "player" then return playerGUID end
+    if unit == "pet" then return "Pet-0-mine" end
+end
+function UnitNameFromGUID(guid)
+    if guid == "Player-0-hidden-name" then return secret, "Test Realm" end
+    return "Victim", "Other Realm"
+end
 local honor = 100
 C_CurrencyInfo = { GetCurrencyInfo = function(id)
     assert(id == 1792)
@@ -199,11 +209,72 @@ C_CurrencyInfo = { GetCurrencyInfo = function() return { quantity = 0 } end }
 tick(2)
 assert(#profile.events == beforeMissingAPI, "Restoring the API must not create an honor loss")
 
+-- Named kills require the explicit killer/victim event, never the selected target.
+assert(collector.registered.PARTY_KILL)
+hasPosition = true
+local beforeKills = #profile.events
+fire("PARTY_KILL", "Player-0-me", "Player-0-enemy")
+local kill = profile.events[#profile.events]
+assert(kill.type == "player-kill" and kill.victim == "Victim-Other Realm")
+assert(kill.amount == 0 and kill.context == "world" and kill.location.x == 0.2)
+assert(not kill.byPet)
+fire("PARTY_KILL", "Player-0-me", "Player-0-enemy")
+assert(#profile.events == beforeKills + 1, "Duplicate kill signals must not add events")
+fire("PARTY_KILL", "Player-0-group-member", "Player-0-other")
+fire("PARTY_KILL", "Player-0-me", "Creature-0-enemy")
+fire("PARTY_KILL", "Player-0-me", "Pet-0-enemy")
+fire("PARTY_KILL", "Player-0-me", "Player-0-me")
+fire("PARTY_KILL", secret, "Player-0-other")
+fire("PARTY_KILL", "Player-0-me", secret)
+playerGUID = secret
+fire("PARTY_KILL", "Player-0-me", "Player-0-other")
+playerGUID = "Player-0-me"
+assert(#profile.events == beforeKills + 1, "Ignore group kills, NPCs and restricted identities")
+tick(2)
+fire("PARTY_KILL", "Pet-0-mine", "Player-0-enemy")
+assert(profile.events[#profile.events].byPet == true, "A later kill by our pet is a separate observation")
+fire("PARTY_KILL", "Player-0-me", "Player-0-hidden-name")
+assert(profile.events[#profile.events].type == "player-kill" and not profile.events[#profile.events].victim)
+local savedNameAPI = UnitNameFromGUID
+UnitNameFromGUID = nil
+fire("PARTY_KILL", "Player-0-me", "Player-0-no-name-api")
+assert(not profile.events[#profile.events].victim, "Never guess a victim from the current target")
+UnitNameFromGUID = savedNameAPI
+assert(hk == hkBeforeHonor, "Named kills must not fabricate HK counter gains")
+
 fire("BARBER_SHOP_OPEN")
 barberDirty, barberChoice, barberSex = true, 1, 1
 fire("BARBER_SHOP_RESULT", true)
 fire("BARBER_SHOP_CLOSE")
 playerSex = 3
+function RequestTimePlayed() fire("TIME_PLAYED_MSG", 123456) end
+Enum = { TransmogType = { Appearance = 0 }, TransmogModification = { Main = 0 } }
+local appliedSource, appliedVisual = 99, 88
+C_Transmog = {
+    GetSlotVisualInfo = function(location)
+        assert(location.slotID == 1 and location.type == 0 and location.modification == 0)
+        return { appliedSourceID = appliedSource, appliedVisualID = appliedVisual, pendingSourceID = 777 }
+    end,
+    GetItemIDForSource = function(source) assert(source == 99); return 456 end,
+}
+C_TransmogCollection = { IsAppearanceHiddenVisual = function(visual) return visual == 55 end }
+local function capturedTransmog()
+    SlashCmdList.CHAOSWORLDPVP("export")
+    return profile.snapshots[#profile.snapshots].equipment[1].transmogItemId
+end
+assert(capturedTransmog() == 456, "Use applied transmog, never pending NPC previews")
+appliedVisual = 55
+assert(capturedTransmog() == 0, "Preserve hidden appearances")
+appliedSource = 0
+assert(capturedTransmog() == 123, "A removed transmog returns to the equipped item")
+appliedSource = secret
+assert(capturedTransmog() == nil, "Discard restricted transmog values")
+appliedSource = 99
+local savedTransmog = C_Transmog
+C_Transmog = nil
+assert(capturedTransmog() == nil, "Older clients without transmog APIs still export")
+C_Transmog = savedTransmog
+appliedVisual = 88
 C_TooltipInfo = { GetInventoryItem = function()
     return { lines = {
         { leftText = "Test Hat" },
@@ -220,9 +291,12 @@ end
 assert(type(payload) == "string" and payload:find('"format":"chaos%-world%-pvp"'))
 assert(payload:find('"equipment":%['))
 assert(payload:find('"honorPoints":0') and payload:find('"honor%-points%-gain"'))
+assert(payload:find('"victim":"Victim%-Other Realm"') and payload:find('"type":"player%-kill"'))
 assert(payload:find('"raceId":1') and payload:find('"sex":3'))
 assert(payload:find('"appearance":') and payload:find('"choiceId":120'))
 assert(payload:find('"icon":133138') and payload:find('"quality":4'))
+assert(payload:find('"transmogItemId":456'))
+assert(payload:find('"playedSeconds":123456') and payload:find('"playedAt":'))
 assert(payload:find('"text":"+2 Agilité"', 1, true) and payload:find('"right":"Tissu"', 1, true))
 assert(not profile.snapshots[#profile.snapshots].equipment[1].tooltip, "Tooltips must not accumulate in the export history")
 assert(payload:find('"cause":"pve"') and payload:find('"source":"Fatal pet"'))
@@ -230,4 +304,27 @@ assert(payload:find('\\u0022Hat\\u0022'))
 assert(not payload:find('"lifetimeHK":{}'))
 -- Available to the optional Wasmoon runner for validation with the real import schema.
 collectorTestPayload = payload
+local previousPlayed = profile.played
+fire("TIME_PLAYED_MSG", secret)
+fire("TIME_PLAYED_MSG", -1)
+assert(profile.played == previousPlayed, "Unreadable played values must not erase the last measurement")
+local priorSnapshots = #profile.snapshots
+fire("PLAYER_GUILD_UPDATE", "target")
+assert(#profile.snapshots == priorSnapshots)
+fire("PLAYER_GUILD_UPDATE", "player")
+assert(#profile.snapshots == priorSnapshots + 1, "Record membership changes for guild attribution")
+local deferred
+C_Timer.After = function(_, callback) deferred = callback end
+RequestTimePlayed = function() end
+SlashCmdList.CHAOSWORLDPVP("export")
+assert(#profile.snapshots == priorSnapshots + 1, "Wait for the asynchronous played reply before exporting")
+fire("TIME_PLAYED_MSG", 123500)
+assert(profile.snapshots[#profile.snapshots].playedSeconds == 123500)
+local exportedSnapshots = #profile.snapshots
+deferred()
+assert(#profile.snapshots == exportedSnapshots, "A late timeout must not create a duplicate export")
+RequestTimePlayed = nil
+SlashCmdList.CHAOSWORLDPVP("export")
+deferred()
+assert(profile.snapshots[#profile.snapshots].playedSeconds == 123500, "Fallback to the last dated measurement if the API is absent")
 print("Collector simulated scenario passed")

@@ -68,6 +68,25 @@ test("barber choices translate between HD and SD, including captures made in SD"
   assert.deepEqual(selectAppearance([{ optionId: 999, choiceId: 1 }], sd, mapping), { options: [], unmatched: 1 });
 });
 
+test("armory uses transmog visuals, hides invisible slots and keeps weapon enchants", (t) => {
+  const input = batch();
+  input.snapshots[1].equipment = [
+    { slot: 1, itemId: 123, transmogItemId: 0 },
+    { slot: 16, itemId: 456, transmogItemId: 789, link: "|Hitem:456:1900:0|h[Sword]|h" },
+    { slot: 17, itemId: 321 },
+  ];
+  const imported = validateImport(input);
+  assert.equal(armoryParams(1, 2, imported.snapshots[1].equipment).get("g"), "q789e1900.r321");
+  assert.equal(imported.snapshots[1].equipment[1].itemId, 456);
+  const store = createTrackerStore({ dataDir: temporary(t) });
+  store.importBatch(input);
+  assert.equal(store.read().characters[0].snapshots[1].equipment[0].transmogItemId, 0);
+  for (const invalid of [-1, 1.5, "789", 1000000001]) {
+    input.snapshots[1].equipment[1].transmogItemId = invalid;
+    assert.throws(() => validateImport(input), /Export invalide/);
+  }
+});
+
 test("viewer resource relays restrict sources, share requests and recover from failures", async (t) => {
   let calls = 0;
   const fetched = [];
@@ -217,7 +236,7 @@ test("reimports fill missing equipment metadata without rewriting observations",
   store.importBatch(legacy);
   const enriched = batch();
   const item = enriched.snapshots[1].equipment[0];
-  Object.assign(item, { icon: 133138, quality: 0, tooltip: [{ text: "+2 Agilité" }] });
+  Object.assign(item, { icon: 133138, quality: 0, transmogItemId: 0, tooltip: [{ text: "+2 Agilité" }] });
 
   enriched.events[0].amount = 99;
   assert.throws(() => store.importBatch(enriched), /Conflit/);

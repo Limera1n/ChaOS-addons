@@ -1,4 +1,4 @@
-import { filterDeaths, groupZones, honorProgress, itemQuality, summarize } from "./model.js";
+import { filterDeaths, formatPlayed, groupZones, guildKey, honorProgress, itemQuality, killLabel, listGuilds, summarize, summarizeGuild } from "./model.js";
 import { itemEnchant, mountArmory } from "./armory.js";
 import { AZEROTH, mapContains, mapRegions, projectPosition } from "./map-regions.js";
 import { mapOutlines } from "./map-outlines.js";
@@ -23,6 +23,7 @@ const date = (at) =>
   at == null ? "Non relevé" : new Date(at * 1000).toLocaleString("fr-FR");
 const count = (value) => (value == null ? "—" : value.toLocaleString("fr-FR"));
 function eventLabel(item) {
+  if (item.type === "player-kill") return killLabel(item);
   if (item.type !== "death") return `+${count(item.amount)} VH`;
   const cause = deathCauses.get(item.cause) ?? "cause inconnue";
   return `Mort · ${cause}${item.source ? ` · ${item.source}` : ""}`;
@@ -86,7 +87,8 @@ let selectedKey = null;
 let selectedMap = AZEROTH;
 let selectedEvents = [];
 let mapNames = new Map();
-let honorScope = "character";
+let directory = "players";
+let selectedGuild = null;
 let profileView = "character";
 
 function factionMark(faction) {
@@ -112,29 +114,18 @@ function setProfileView(view) {
   $("#activity").hidden = view !== "pvp";
 }
 
-function renderHonorProgress(character, guild) {
+function renderHonorProgress(character, guildSummary = null, guildName = null) {
   const panel = $(".honor-progress");
-  const isGuild = honorScope === "guild" && guild != null;
+  const isGuild = guildSummary !== null;
   const scope = isGuild ? "guild" : "character";
   panel.dataset.scope = scope;
-  for (const button of panel.querySelectorAll("button[data-scope]")) {
-    button.setAttribute("aria-pressed", String(button.dataset.scope === scope));
-    button.onclick = () => {
-      honorScope = button.dataset.scope;
-      renderHonorProgress(character, guild);
-    };
-  }
-  const guildmates = isGuild
-    ? state.characters.filter((item) =>
-        item.region === character.region && item.realm === character.realm && item.ruleset === character.ruleset)
-    : [character];
-  const history = honorProgress(guildmates, isGuild ? guild : null);
-  panel.querySelector(".honor-scope").textContent = isGuild ? guild : character.name;
+  const history = isGuild ? guildSummary.history : honorProgress([character]);
+  panel.querySelector(".honor-scope").textContent = isGuild ? guildName : character.name;
   panel.querySelector(".honor-total").textContent = history ? `${count(history.total)} VH` : "—";
   panel.querySelector(".honor-note").textContent = history?.total === 0
-    ? "Aucune VH en monde ouvert observée sur cette période."
+    ? "Aucune VH observée sur cette période."
     : isGuild
-      ? "Somme des VH relevées chez les membres suivis, selon leur guilde au moment du relevé."
+      ? "Gains cumulés de tous les membres suivis, tous contextes, pendant leur appartenance à la guilde."
       : "Cumul des VH observées en monde ouvert pendant la collecte.";
   panel.querySelector(".honor-plot").hidden = !history;
   if (!history) {
@@ -155,7 +146,7 @@ function renderHonorProgress(character, guild) {
   panel.querySelector(".honor-area").setAttribute("d", `${line} V 88 Z`);
   panel.querySelector(".honor-start").textContent = date(start);
   panel.querySelector(".honor-end").textContent = end === start ? "" : date(end);
-  panel.querySelector(".honor-chart").setAttribute("aria-label", `${count(total)} VH observées · ${isGuild ? guild : character.name}`);
+  panel.querySelector(".honor-chart").setAttribute("aria-label", `${count(total)} VH observées · ${isGuild ? guildName : character.name}`);
 }
 
 async function load() {
@@ -164,10 +155,29 @@ async function load() {
   state = await response.json();
   if (!state.characters.some((item) => item.key === selectedKey))
     selectedKey = state.characters[0]?.key ?? null;
-  render();
+  readRoute();
 }
 function renderRoster() {
+  for (const button of document.querySelectorAll("[data-directory]"))
+    button.setAttribute("aria-pressed", String(button.dataset.directory === directory));
+  $("#directory-title").textContent = directory === "guilds" ? "Les guildes" : "Les joueurs";
   const query = $("#search").value.toLocaleLowerCase("fr");
+  if (directory === "guilds") {
+    const guilds = listGuilds(state.characters);
+    $("#roster-count").textContent = guilds.length;
+    $("#roster").replaceChildren();
+    for (const guild of guilds.filter((item) => `${item.name} ${item.realm}`.toLocaleLowerCase("fr").includes(query))) {
+      const button = document.createElement("button");
+      button.className = "roster-item";
+      button.setAttribute("aria-pressed", String(guild.key === selectedGuild));
+      const summary = summarizeGuild(state.characters, guild);
+      button.innerHTML = `${escape(guild.name)}<small>${escape(guild.realm)} · ${count(summary.currentMembers)} membre(s) suivi(s)</small>`;
+      button.addEventListener("click", () => navigate("guilds", guild.key));
+      $("#roster").append(button);
+    }
+    if (!guilds.length) $("#roster").textContent = "Aucune guilde dans les relevés importés.";
+    return;
+  }
   const roster = state.characters.filter((item) =>
     `${item.name} ${summarize(item).latest?.guild ?? ""}`
       .toLocaleLowerCase("fr")
@@ -184,9 +194,8 @@ function renderRoster() {
     button.innerHTML = `${escape(character.name)}<small>${escape(character.class ?? "Classe inconnue")} · ${count(summarize(character).worldHK)} VH observées</small>`;
     button.addEventListener("click", () => {
       if (selectedKey === character.key) return;
-      selectedKey = character.key;
       selectedMap = AZEROTH;
-      render();
+      navigate("players", character.key);
     });
     $("#roster").append(button);
   }
@@ -227,9 +236,81 @@ function armoryEquipment(snapshot) {
   </div>`;
 }
 
+function progressChart(guild = false) {
+  return `<section class="honor-progress" aria-labelledby="honor-title">
+    <div class="honor-heading"><div><p class="eyebrow">${guild ? "EFFORT COLLECTIF · TOUS CONTEXTES" : "MONDE OUVERT"}</p><h3 id="honor-title">Évolution des VH${guild ? " de la guilde" : ""}</h3></div></div>
+    <div class="honor-reading"><span class="honor-scope"></span><strong class="honor-total"></strong></div>
+    <div class="honor-plot">
+      <svg class="honor-chart" viewBox="0 0 560 100" preserveAspectRatio="none" role="img">
+        <defs><linearGradient id="honor-fill" x1="0" x2="0" y1="0" y2="1"><stop offset="0" stop-color="currentColor" stop-opacity=".25"/><stop offset="1" stop-color="currentColor" stop-opacity="0"/></linearGradient></defs>
+        <path class="honor-grid" d="M 8 12 H 552 M 8 50 H 552 M 8 88 H 552"/>
+        <path class="honor-area" fill="url(#honor-fill)"/><path class="honor-line"/>
+      </svg>
+      <div class="honor-dates"><span class="honor-start"></span><span class="honor-end"></span></div>
+    </div>
+    <p class="muted honor-note"></p>
+  </section>`;
+}
+
+function renderGuild() {
+  $("#activity").hidden = true;
+  const guilds = listGuilds(state.characters);
+  const guild = guilds.find((item) => item.key === selectedGuild) ?? guilds[0];
+  if (!guild) {
+    $("#profile").innerHTML = '<div class="empty"><p class="eyebrow">LES GUILDES</p><h2>Aucune guilde relevée.</h2><p>Importe les exports des membres pour ouvrir la fiche de leur guilde.</p></div>';
+    return;
+  }
+  selectedGuild = guild.key;
+  renderRoster();
+  const summary = summarizeGuild(state.characters, guild);
+  $("#profile").innerHTML = `<section class="guild-page" aria-labelledby="guild-title">
+    <div class="guild-heading"><div><p class="eyebrow">CARNET DE GUILDE · ${escape(guild.realm)}</p><h2 id="guild-title">&lt;${escape(guild.name)}&gt;</h2><p class="muted">Région ${escape(guild.region)} · ${escape(guild.ruleset === "unknown" ? "Règles non renseignées" : guild.ruleset)}</p></div><span class="guild-banner" aria-hidden="true">⚑</span></div>
+    <div class="metrics">
+      <div class="metric"><strong>${count(summary.lifetimeHK)}</strong><span>VH cumulées · membres actuels suivis</span></div>
+      <div class="metric"><strong>${count(summary.history?.total ?? 0)}</strong><span>VH gagnées en guilde · observées</span></div>
+      <div class="metric"><strong>${count(summary.worldHistory?.total ?? 0)}</strong><span>Dont monde ouvert</span></div>
+      <div class="metric"><strong>${count(summary.currentMembers)}</strong><span>Membres actuels suivis</span></div>
+    </div>
+    <p class="muted">Les VH cumulées additionnent les derniers compteurs connus de ${count(summary.knownCounters)} membre(s) actuel(s), y compris leurs VH acquises avant la guilde. La courbe additionne uniquement les gains observés pendant l’appartenance à cette guilde, anciens membres compris.</p>
+    ${summary.members.length === 1 ? '<p class="notice">Un seul personnage suivi : la courbe de guilde contient uniquement ses gains. Importe les relevés des autres membres pour les ajouter.</p>' : ""}
+    ${progressChart(true)}
+    <div class="section-title"><h3>Contributions des membres</h3><span>${count(summary.members.length)} personnage(s) suivi(s)</span></div>
+    <div class="table-scroll"><table class="guild-members"><thead><tr><th>Personnage</th><th>Statut relevé</th><th>VH cumulées</th><th>Gains en guilde</th><th>Dont monde ouvert</th></tr></thead><tbody>
+    ${summary.members.map((member) => `<tr><td><a href="#player=${encodeURIComponent(member.character.key)}">${escape(member.character.name)}</a><small>${escape(member.character.class ?? "Classe inconnue")}</small></td><td>${member.current ? "Membre" : "Ancien membre"}</td><td>${count(member.lifetimeHK)}</td><td>+${count(member.history.total)}</td><td>+${count(member.worldHistory.total)}</td></tr>`).join("")}
+    </tbody></table></div>
+    <p class="muted">Seuls les personnages dont les données ont été importées sont inclus. Les VH de groupe comptent pour chaque participant ; ce total représente les crédits de VH des membres, pas des victimes uniques. Les périodes sans collecte ne sont pas reconstituées.</p>
+  </section>`;
+  renderHonorProgress(null, summary, guild.name);
+}
+
+function navigate(view, key) {
+  const hash = `#${view === "guilds" ? "guild" : "player"}=${encodeURIComponent(key)}`;
+  if (location.hash === hash) readRoute();
+  else location.hash = hash;
+}
+
+function readRoute() {
+  const params = new URLSearchParams(location.hash.slice(1));
+  if (params.has("guild")) {
+    directory = "guilds";
+    selectedGuild = params.get("guild");
+  } else if (params.has("player")) {
+    directory = "players";
+    selectedKey = params.get("player");
+  } else directory = "players";
+  if (!state.characters.some((item) => item.key === selectedKey))
+    selectedKey = state.characters[0]?.key ?? null;
+  render();
+}
+
 function render() {
   hideEquipmentTooltip();
+  $("#profile").setAttribute("aria-label", directory === "guilds" ? "Fiche guilde" : "Fiche personnage");
   renderRoster();
+  if (directory === "guilds") {
+    renderGuild();
+    return;
+  }
   const character = state.characters.find((item) => item.key === selectedKey);
   if (!character) return;
   const summary = summarize(character);
@@ -244,7 +325,8 @@ function render() {
       <div class="armory-identity-copy">
         <h2 id="armory-title">${escape(character.name)}</h2>
         <p class="armory-identity-meta">Niveau ${count(character.level)} · ${escape(character.race ?? "Race inconnue")} · ${escape(character.class ?? "Classe inconnue")}</p>
-        <p class="armory-affiliation">${guild ? `&lt;${escape(guild)}&gt; · ` : ""}${escape(character.realm)}</p>
+        <p class="armory-affiliation">${guild ? `<a class="guild-link" href="#guild=${encodeURIComponent(guildKey(character, guild))}">&lt;${escape(guild)}&gt;</a> · ` : ""}${escape(character.realm)}</p>
+        <p class="armory-played" title="${escape(date(summary.playedAt))}">Temps de jeu · /played : <strong>${escape(formatPlayed(summary.playedSeconds))}</strong>${summary.playedAt == null ? " · à relever avec le nouvel addon" : ` · relevé le ${escape(date(summary.playedAt))}`}</p>
       </div>
     </div>
     <span class="armory-equipped">${count(latest?.equipment.length ?? 0)} / 19 pièces équipées</span>
@@ -269,30 +351,8 @@ function render() {
       </details>
     </section>
     <div class="metrics"><div class="metric"><strong>${count(summary.lifetimeHK)}</strong><span>VH cumulées · tous contextes</span></div><div class="metric"><strong>${count(summary.worldHK)}</strong><span>VH observées · monde ouvert</span></div><div class="metric"><strong>${count(summary.deaths)}</strong><span>Morts observées · monde ouvert</span></div><div class="metric"><strong>${summary.delta == null ? "—" : "+" + count(summary.delta)}</strong><span>Écart du compteur · tous contextes</span></div></div>
-    <p class="muted">Compteur relevé le ${escape(date(summary.counterAt))}. Dernier import le ${escape(date(character.lastImportedAt))}. Règles de jeu ${escape(character.ruleset === "unknown" ? "non renseignées" : character.ruleset)}.</p>
-    <section class="honor-progress" aria-labelledby="honor-title">
-      <div class="honor-heading">
-        <div><p class="eyebrow">MONDE OUVERT</p><h3 id="honor-title">Évolution des VH</h3></div>
-        <div class="honor-switch" role="group" aria-label="Périmètre des VH">
-          <button type="button" data-scope="character">Personnage</button>
-          <button type="button" data-scope="guild" ${latest?.guild == null ? "disabled" : ""}>Guilde</button>
-        </div>
-      </div>
-      <div class="honor-reading"><span class="honor-scope"></span><strong class="honor-total"></strong></div>
-      <div class="honor-plot">
-        <svg class="honor-chart" viewBox="0 0 560 100" preserveAspectRatio="none" role="img">
-          <defs><linearGradient id="honor-fill" x1="0" x2="0" y1="0" y2="1">
-            <stop offset="0" stop-color="currentColor" stop-opacity=".25" />
-            <stop offset="1" stop-color="currentColor" stop-opacity="0" />
-          </linearGradient></defs>
-          <path class="honor-grid" d="M 8 12 H 552 M 8 50 H 552 M 8 88 H 552" />
-          <path class="honor-area" fill="url(#honor-fill)" />
-          <path class="honor-line" />
-        </svg>
-        <div class="honor-dates"><span class="honor-start"></span><span class="honor-end"></span></div>
-      </div>
-      <p class="muted honor-note"></p>
-    </section>
+    <p class="muted">Compteur relevé le ${escape(date(summary.counterAt))}. Dernier import le ${escape(date(character.lastImportedAt))}. Règles de jeu ${escape(character.ruleset === "unknown" ? "non renseignées" : character.ruleset)}. ${count(summary.kills)} coup${summary.kills === 1 ? "" : "s"} fatal${summary.kills === 1 ? "" : "s"} observé${summary.kills === 1 ? "" : "s"} en monde ouvert (toi ou ton familier).</p>
+    ${progressChart()}
     </div>
     </section>`;
   mountArmory($(".armory"), character, latest);
@@ -300,7 +360,7 @@ function render() {
   for (const button of $(".armory").querySelectorAll("[data-profile-view]")) {
     button.addEventListener("click", () => setProfileView(button.dataset.profileView));
   }
-  renderHonorProgress(character, latest?.guild);
+  renderHonorProgress(character);
   for (const icon of $("#profile").querySelectorAll(".item-icon img"))
     icon.addEventListener("error", () => icon.remove(), { once: true });
   selectedEvents = summary.events;
@@ -326,7 +386,7 @@ function renderZones(events) {
     ? zones
         .map(
           (zone) =>
-            `<button type="button" class="zone" data-map="${escape(zone.key)}"><strong>${escape(zone.name)}</strong><span>${count(zone.hk)} VH · ${count(zone.deaths)} mort${zone.deaths === 1 ? "" : "s"}</span></button>`,
+            `<button type="button" class="zone" data-map="${escape(zone.key)}"><strong>${escape(zone.name)}</strong><span>${count(zone.hk)} VH · ${count(zone.kills)} joueur${zone.kills === 1 ? "" : "s"} tué${zone.kills === 1 ? "" : "s"} · ${count(zone.deaths)} mort${zone.deaths === 1 ? "" : "s"}</span></button>`,
         )
         .join("")
     : '<p class="muted">Aucun événement pour cette sélection.</p>';
@@ -443,6 +503,8 @@ function renderMap(events) {
     marker.append(svgElement("circle", { class: "map-marker-target", r: 2 }));
     marker.append(item.type === "death"
       ? svgElement("path", { class: "map-death", d: "M-1.25,-1.25l2.5,2.5m0,-2.5l-2.5,2.5" })
+      : item.type === "player-kill"
+      ? svgElement("path", { class: "map-dot", d: "M0,-1.4L1.1,0 0,1.4 -1.1,0Z" })
       : svgElement("circle", { class: "map-dot", r: 0.9 }));
     const title = svgElement("title", {});
     const { x: localX, y: localY, at } = item.location;
@@ -464,6 +526,19 @@ $("#open-import").addEventListener("click", openImport);
 $("#empty-import").addEventListener("click", openImport);
 $("#close-import").addEventListener("click", () => $("#import-dialog").close());
 $("#search").addEventListener("input", renderRoster);
+window.addEventListener("hashchange", readRoute);
+for (const button of document.querySelectorAll("[data-directory]")) {
+  button.addEventListener("click", () => {
+    $("#search").value = "";
+    const guilds = listGuilds(state.characters);
+    if (button.dataset.directory === "guilds") {
+      const key = selectedGuild ?? guilds[0]?.key;
+      if (key) navigate("guilds", key);
+      else { directory = "guilds"; render(); }
+    } else if (selectedKey) navigate("players", selectedKey);
+    else { directory = "players"; render(); }
+  });
+}
 $("#map-filter").addEventListener("change", () => {
   selectMap($("#map-filter").value);
 });
