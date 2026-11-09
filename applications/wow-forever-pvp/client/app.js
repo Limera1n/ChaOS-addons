@@ -300,7 +300,7 @@ function renderGuild() {
     ${summary.members.length === 1 ? '<p class="notice">Un seul personnage suivi : la courbe de guilde contient uniquement ses gains. Importe les relevés des autres membres pour les ajouter.</p>' : ""}
     ${progressChart(true)}
     <div class="section-title"><h3>Contributions des membres</h3><span>${count(summary.members.length)} personnage(s) suivi(s)</span></div>
-    <div class="table-scroll"><table class="guild-members"><thead><tr><th>Personnage</th><th>Statut relevé</th><th>VH cumulées</th><th>Gains en guilde</th><th>Dont monde ouvert</th></tr></thead><tbody>
+    <div class="table-scroll"><table class="guild-members"><thead><tr><th>Personnage</th><th>Statut relevé</th><th>VH cumulées</th><th>VH gagnées en guilde</th><th>Dont monde ouvert</th></tr></thead><tbody>
     ${summary.members.map((member) => `<tr><td><a href="#player=${encodeURIComponent(member.character.key)}">${escape(member.character.name)}</a><small>${escape(member.character.class ?? "Classe inconnue")}</small></td><td>${member.current ? "Membre" : "Ancien membre"}</td><td>${count(member.lifetimeHK)}</td><td>+${count(member.history.total)}</td><td>+${count(member.worldHistory.total)}</td></tr>`).join("")}
     </tbody></table></div>
     <p class="muted">Seuls les personnages dont les données ont été importées sont inclus. Les VH de groupe comptent pour chaque participant ; ce total représente les crédits de VH des membres, pas des victimes uniques. Les périodes sans collecte ne sont pas reconstituées.</p>
@@ -379,16 +379,17 @@ function render() {
       <h3 id="honor-points-title">Points d’honneur</h3>
       <div class="metrics">
         <div class="metric"><strong>${count(summary.honorPoints)}</strong><span>Solde disponible</span></div>
-        <div class="metric"><strong>${count(summary.honorGained)}</strong><span>Points gagnés · observés</span></div>
+        <div class="metric"><strong>${count(summary.honorGained)}</strong><span>Points d’honneur gagnés · observés</span></div>
         <div class="metric"><strong>${count(summary.honorLost)}</strong><span>Baisses du solde · observées</span></div>
-        <div class="metric"><strong>${count(summary.worldHonor)}</strong><span>Points gagnés · monde ouvert</span></div>
+        <div class="metric"><strong>${count(summary.worldHonor)}</strong><span>Points d’honneur gagnés · monde ouvert</span></div>
       </div>
       <p class="muted">${summary.honorAt == null ? "Solde non relevé : installe le collecteur 0.5.5 puis importe un nouvel export." : `Solde relevé le ${escape(date(summary.honorAt))}.`} Les variations observées incluent tous les contextes. Une baisse peut correspondre à un achat ou à une remise à zéro. Les variations hors ligne ne sont pas comptées.</p>
       <details><summary>Historique des points d’honneur</summary>
         <ul>${summary.honorEvents.length ? summary.honorEvents.slice(-20).reverse().map((item) => `<li>${escape(date(item.at))} · ${item.type === "honor-points-gain" ? "+" : "−"}${count(item.amount)} points · ${escape(({world: "monde ouvert", pvp: "champ de bataille", arena: "arène", instance: "instance", unknown: "contexte inconnu"})[item.context])}</li>`).join("") : "<li>Aucune variation observée.</li>"}</ul>
       </details>
     </section>
-    <div class="metrics"><div class="metric"><strong>${count(summary.lifetimeHK)}</strong><span>VH cumulées · tous contextes</span></div><div class="metric"><strong>${count(summary.worldHK)}</strong><span>VH observées · monde ouvert</span></div><div class="metric"><strong>${count(summary.deaths)}</strong><span>Morts observées · monde ouvert</span></div><div class="metric"><strong>${summary.delta == null ? "—" : "+" + count(summary.delta)}</strong><span>Écart du compteur · tous contextes</span></div></div>
+    <h3>Victoires honorables (VH)</h3>
+    <div class="metrics"><div class="metric"><strong>${count(summary.lifetimeHK)}</strong><span>VH cumulées · tous contextes</span></div><div class="metric"><strong>${count(summary.worldHK)}</strong><span>VH observées · monde ouvert</span></div><div class="metric"><strong>${count(summary.deaths)}</strong><span>Morts observées · monde ouvert</span></div><div class="metric"><strong>${summary.delta == null ? "—" : "+" + count(summary.delta)}</strong><span>Écart des VH cumulées · tous contextes</span></div></div>
     <p class="muted">Compteur relevé le ${escape(date(summary.counterAt))}. Dernier import le ${escape(date(character.lastImportedAt))}. ${escape(scopeLabel(character))}. ${count(summary.kills)} coup${summary.kills === 1 ? "" : "s"} fatal${summary.kills === 1 ? "" : "s"} observé${summary.kills === 1 ? "" : "s"} en monde ouvert (toi ou ton familier).</p>
     ${progressChart()}
     </div>
@@ -434,7 +435,7 @@ function renderZones(events) {
     ? zones
         .map(
           (zone) =>
-            `<button type="button" class="zone" data-map="${escape(zone.key)}"><strong>${escape(zone.name)}</strong><span>${count(zone.hk)} VH · ${count(zone.kills)} joueur${zone.kills === 1 ? "" : "s"} tué${zone.kills === 1 ? "" : "s"} · ${count(zone.deaths)} mort${zone.deaths === 1 ? "" : "s"}</span></button>`,
+            `<button type="button" class="zone" data-map="${escape(zone.key)}"><strong>${escape(zone.name)}</strong><span>${count(zone.hk)} VH · ${count(zone.kills)} coup${zone.kills === 1 ? " fatal" : "s fatals"} · ${count(zone.deaths)} mort${zone.deaths === 1 ? "" : "s"}</span></button>`,
         )
         .join("")
     : '<p class="muted">Aucun événement pour cette sélection.</p>';
@@ -461,7 +462,7 @@ function renderEncounters() {
     <div class="encounter-heading"><span class="encounter-tag">Session probable</span><time>${escape(date(group.start))} → ${escape(dayKey(group.start) === dayKey(group.end) ? new Date(group.end * 1000).toLocaleTimeString("fr-FR") : date(group.end))}</time></div>
     <h4>${group.zones.length === 1 ? escape(group.zone) : `${count(group.zones.length)} zones parcourues`}</h4>
     ${group.zones.length > 1 ? `<p class="encounter-route" title="${escape(group.zones.join(" → "))}">${escape(group.zones.slice(0, 3).join(" → "))}${group.zones.length > 3 ? "…" : ""}</p>` : ""}
-    <p class="encounter-reading"><strong>${count(group.members.length)} membres observés</strong><span>+${count(group.hk)} VH créditées · ${count(group.kills)} coup(s) fatal(s)</span></p>
+    <p class="encounter-reading"><strong title="Somme des victoires honorables créditées aux participants pendant les rapprochements">${count(group.hk)} VH au total</strong><span>${count(group.members.length)} membres observés · ${count(group.kills)} coup${group.kills === 1 ? " fatal observé" : "s fatals observés"}</span></p>
     <p class="encounter-members">${group.members.map((member) => `<a href="#player=${encodeURIComponent(member.key)}">${escape(member.name)}</a>`).join(" · ")}</p>
     ${group.inferredGuildMembers ? `<p class="muted">Guilde déduite d’un relevé ultérieur de la même session pour ${count(group.inferredGuildMembers)} membre(s).</p>` : ""}
     <div class="encounter-footer"><small>Durée observée : ${escape(formatSessionDuration(group.end - group.start))} · ${count(group.encounters.length)} rapprochement(s)</small><button type="button" data-encounter="${index}">Voir les positions ↗</button></div>
