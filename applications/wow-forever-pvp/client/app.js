@@ -97,6 +97,7 @@ let activityOrder = "newest";
 let activityEvents = [];
 let allGroups = [];
 let visibleGroups = [];
+let focusedSession = null;
 let mountCurrentArmory = null;
 const dayLabel = (day) => new Date(`${day}T12:00:00`).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" });
 const scopedCharacter = (character) => activityCharacter(character, selectedDay);
@@ -320,6 +321,7 @@ function navigate(view, key) {
 }
 
 function readRoute() {
+  focusedSession = null;
   const previousKey = selectedKey;
   const previousDirectory = directory;
   const params = new URLSearchParams(location.hash.slice(1));
@@ -536,6 +538,8 @@ function renderMap(events) {
   const name = mapNames.get(mapId);
   $("#map-current").textContent = name;
   $("#map-zoom-out").disabled = mapId === AZEROTH;
+  $("#map-clear-session").hidden = !focusedSession;
+  $("#map-session-key").hidden = !focusedSession;
   map.setAttribute("aria-label", `Carte de ${name}`);
   if (!/^\d+$/u.test(mapId)) {
     art.replaceChildren();
@@ -570,6 +574,22 @@ function renderMap(events) {
     bindMapTarget(outline, id);
     map.append(outline);
   }
+  const occupied = new Set();
+  for (const encounter of focusedSession?.encounters ?? []) {
+    const position = projectPosition({ mapId: encounter.mapId, x: encounter.x, y: encounter.y }, mapId);
+    if (!position) continue;
+    const x = position.x * 150;
+    const y = position.y * 100;
+    // Keep one representative position per small patch of the displayed map.
+    const cell = `${Math.round(x / 3.5)}/${Math.round(y / 3.5)}`;
+    if (occupied.has(cell)) continue;
+    occupied.add(cell);
+    const ring = svgElement("circle", { class: "map-group", cx: x, cy: y, r: 1.25 });
+    const title = svgElement("title", {});
+    title.textContent = `Session probable · ${encounter.members.map((member) => member.name).join(", ")} · ${date(encounter.start)}`;
+    ring.append(title);
+    map.append(ring);
+  }
   // SVG paints in DOM order: honor markers must sit above every death cross.
   const ordered = [...points].sort((a, b) => Number(a.item.type !== "death") - Number(b.item.type !== "death"));
   for (const { item, x, y } of ordered) {
@@ -591,15 +611,6 @@ function renderMap(events) {
     }
     map.append(marker);
   }
-  for (const group of visibleGroups) for (const encounter of group.encounters) {
-    const position = projectPosition({ mapId: encounter.mapId, x: encounter.x, y: encounter.y }, mapId);
-    if (!position) continue;
-    const ring = svgElement("circle", { class: "map-group", cx: position.x * 150, cy: position.y * 100, r: 2.2 });
-    const title = svgElement("title", {});
-    title.textContent = `Session probable · ${encounter.members.map((member) => member.name).join(", ")} · ${date(encounter.start)}`;
-    ring.append(title);
-    map.append(ring);
-  }
 }
 const openImport = () => {
   $("#import-error").textContent = "";
@@ -607,6 +618,7 @@ const openImport = () => {
 };
 $("#death-filter").addEventListener("change", () => selectMap(selectedMap));
 $("#day-filter").addEventListener("change", () => {
+  focusedSession = null;
   selectedDay = $("#day-filter").value;
   render();
 });
@@ -617,6 +629,7 @@ $("#event-sort").addEventListener("change", () => {
 $("#daily-rows").addEventListener("click", (event) => {
   const button = event.target.closest("[data-day]");
   if (!button) return;
+  focusedSession = null;
   selectedDay = selectedDay === button.dataset.day ? "" : button.dataset.day;
   render();
 });
@@ -624,10 +637,17 @@ $("#encounters").addEventListener("click", (event) => {
   const button = event.target.closest("[data-encounter]");
   if (!button) return;
   const group = visibleGroups[Number(button.dataset.encounter)];
+  focusedSession = group;
   selectedMap = group.zones.length > 1 ? AZEROTH : String(group.mapId);
   if (directory === "players") profileView = "pvp";
   render();
+  $("#map-clear-session").focus({ preventScroll: true });
   $("#map-current").scrollIntoView({ block: "center", behavior: "smooth" });
+});
+$("#map-clear-session").addEventListener("click", () => {
+  focusedSession = null;
+  selectMap(selectedMap);
+  $("#map-current").focus({ preventScroll: true });
 });
 $("#open-import").addEventListener("click", openImport);
 $("#empty-import").addEventListener("click", openImport);

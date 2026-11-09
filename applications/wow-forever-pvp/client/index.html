@@ -104,8 +104,11 @@
               Chaque marqueur indique la position d’un personnage suivi.
             </p>
             <div class="map-toolbar">
-              <span id="map-current" aria-live="polite">Azeroth</span>
-              <button id="map-zoom-out" type="button" disabled>− Dézoomer</button>
+              <span id="map-current" aria-live="polite" tabindex="-1">Azeroth</span>
+              <div class="map-actions">
+                <button id="map-clear-session" type="button" hidden>Masquer la session</button>
+                <button id="map-zoom-out" type="button" disabled>− Dézoomer</button>
+              </div>
             </div>
             <div class="map-frame">
               <div id="map-art" aria-hidden="true"></div>
@@ -120,7 +123,7 @@
             </div>
             <p id="map-note" class="muted" role="status"></p>
             <p class="map-caption muted">
-              <span><b class="map-honor-key">●</b> VH observées · <b class="map-honor-key">◆</b> joueurs tués · <b class="map-death-key">×</b> morts · <b class="map-group-key">○</b> groupes probables</span>
+              <span><b class="map-honor-key">●</b> VH observées · <b class="map-honor-key">◆</b> joueurs tués · <b class="map-death-key">×</b> morts<span id="map-session-key" hidden> · <b class="map-group-key">○</b> session sélectionnée</span></span>
               <span>© Blizzard · <a href="https://warcraftforever.games/maps" target="_blank" rel="noopener noreferrer">Fonds Warcraft Forever</a> · <a href="https://zephras.com/forever/enUS/map/" target="_blank" rel="noopener noreferrer">Contours Zephras</a></span>
             </p>
           </section>

@@ -152,7 +152,7 @@ select:focus-visible {
 .day-meter { width: 100%; height: 5px; }
 .day-track { fill: #36402c; }
 .day-bar { fill: #adc977; }
-.map-group { fill: #edcf8e1a; stroke: #edcf8e; stroke-width: .25; stroke-dasharray: .8 .4; }
+.map-group { fill: #19150c; stroke: #ffe9a6; stroke-width: 1.5; vector-effect: non-scaling-stroke; }
 .map-group-key { color: #edcf8e; }
 @media (max-width: 700px) {
   .day-row { grid-template-columns: 1fr auto; gap: 8px 14px; }
@@ -738,6 +738,7 @@ select {
 }
 .map-toolbar {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   gap: 12px;
@@ -750,7 +751,12 @@ select {
 #map-current {
   font: 17px Georgia, serif;
 }
-#map-zoom-out {
+.map-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.map-actions button {
   flex: none;
   padding: 5px 9px;
   border-color: var(--line);
