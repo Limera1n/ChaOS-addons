@@ -93,6 +93,35 @@ function snapshotEquipment(item, sets) {
   return sets[index];
 }
 
+function professions(value, exportedAt) {
+  record(value);
+  const at = integer(value.at);
+  if (at > exportedAt) fail();
+  const seen = new Set();
+  const items = list(value.items, 16).map((item) => {
+    record(item);
+    const skillLineId = integer(item.skillLineId, 1000000);
+    if (!skillLineId || seen.has(skillLineId)) fail();
+    seen.add(skillLineId);
+    const result = { skillLineId, name: string(item.name), rank: integer(item.rank, 10000), maxRank: integer(item.maxRank, 10000) };
+    if (!result.maxRank || result.rank > result.maxRank) fail();
+    if (item.recipes != null || item.recipesAt != null) {
+      result.recipesAt = integer(item.recipesAt);
+      if (result.recipesAt > at) fail();
+      const ids = new Set();
+      result.recipes = list(item.recipes, 5000).map((recipe) => {
+        record(recipe);
+        const id = integer(recipe.id, 1000000000);
+        if (!id || ids.has(id)) fail();
+        ids.add(id);
+        return { id, name: string(recipe.name), ...(recipe.available == null ? {} : { available: integer(recipe.available, 1000000) }) };
+      });
+    }
+    return result;
+  });
+  return { at, items };
+}
+
 function characterStats(value) {
   if (value == null) return {};
   record(value);
@@ -134,6 +163,7 @@ export function validateImport(input) {
     events: [],
   };
   result.character.ruleset = identityRuleset(result.character);
+  if (input.professions != null) result.professions = professions(input.professions, result.exportedAt);
   result.character.name = playerName(result.character);
   if (character.appearance != null)
     result.character.appearance = characterAppearance(character.appearance, result.character, result.exportedAt);

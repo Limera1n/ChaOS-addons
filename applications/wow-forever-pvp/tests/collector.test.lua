@@ -82,6 +82,7 @@ C_Map = {
 SlashCmdList = {}
 
 dofile("wow-addon/ChaOSWorldPvP/json.lua")
+dofile("wow-addon/ChaOSWorldPvP/professions.lua")
 dofile("wow-addon/ChaOSWorldPvP/collector.lua")
 local collector = frames[1]
 local function fire(name, ...) collector.scripts.OnEvent(collector, name, ...) end
@@ -348,4 +349,18 @@ assert(noGuildProfile.snapshots[#noGuildProfile.snapshots].guildKnown == true, "
 IsInGuild = function() return true end
 fire("PLAYER_GUILD_UPDATE", "player")
 assert(noGuildProfile.snapshots[#noGuildProfile.snapshots].guildKnown == nil, "An unloaded guild name is not a confirmed absence")
+local eventsBeforeDrop = #noGuildProfile.events
+hk = 0; tick(2)
+fire("PLAYER_GUILD_UPDATE", "player")
+assert(noGuildProfile.snapshots[#noGuildProfile.snapshots].lifetimeHK == nil, "Temporary zero is unavailable")
+hk = 300; tick(2)
+assert(#noGuildProfile.events == eventsBeforeDrop, "Restoring the lifetime counter must not fabricate a gain")
+hk = 301; tick(2)
+assert(noGuildProfile.events[#noGuildProfile.events].amount == 1, "Real gains still count after recovery")
+hk = 0; fire("PLAYER_LOGIN"); tick(2)
+local eventsAfterLogin = #noGuildProfile.events
+hk = 301; tick(2)
+assert(#noGuildProfile.events == eventsAfterLogin, "Persisted high water protects a login with an unloaded counter")
+hk = 302; tick(2)
+assert(noGuildProfile.events[#noGuildProfile.events].amount == 1)
 print("Collector simulated scenario passed")

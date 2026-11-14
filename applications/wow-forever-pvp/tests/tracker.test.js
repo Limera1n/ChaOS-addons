@@ -267,6 +267,42 @@ function temporary(t) {
   return path;
 }
 
+test("counter rebounds are repaired durably without letting old exports restore false gains", (t) => {
+  const input = batch();
+  input.snapshots = [{ id: "1", at: 100, lifetimeHK: 195, guild: "Test guild", equipment: [] }];
+  input.events = [
+    { id: "2", at: 110, type: "counter-reset", amount: 0, context: "instance" },
+    { id: "3", at: 111, type: "honor-gain", amount: 195, context: "instance" },
+    { id: "4", at: 115, type: "honor-gain", amount: 1, context: "world" },
+    { id: "5", at: 120, type: "counter-reset", amount: 0, context: "world" },
+    { id: "6", at: 120, type: "honor-gain", amount: 196, context: "world" },
+  ];
+  const dataDir = temporary(t);
+  const store = createTrackerStore({ dataDir });
+  store.importBatch(input);
+  assert.deepEqual(store.read().characters[0].events.map((event) => event.amount), [0, 0, 1, 0, 0]);
+  assert.equal(store.importBatch(input).added, 0);
+  const restarted = createTrackerStore({ dataDir });
+  assert.equal(honorProgress(restarted.read().characters, "Test guild", "all").total, 1);
+  assert.equal(restarted.read().characters[0].events[1].counterReboundAmount, 195);
+  assert.equal(restarted.importBatch(input).added, 0);
+  const changed = structuredClone(input);
+  changed.events[1].amount = 194;
+  assert.throws(() => restarted.importBatch(changed), /Conflit/);
+  for (const mutate of [
+    (batch) => { batch.events[1].at = 116; },
+    (batch) => { batch.events[1].amount = 194; },
+    (batch) => { batch.events[0].type = "session-start"; },
+  ]) {
+    const unmatched = structuredClone(input);
+    mutate(unmatched);
+    const isolated = createTrackerStore({ dataDir: temporary(t) });
+    isolated.importBatch(unmatched);
+    assert.equal(isolated.read().characters[0].events.find((event) => event.id === "3").amount,
+      unmatched.events[1].amount, "Unproven rebounds must remain unchanged");
+  }
+});
+
 test("imports survive restart, deduplicate and reject changed events atomically", (t) => {
   const dataDir = temporary(t);
   const observed = batch();

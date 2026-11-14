@@ -4,6 +4,7 @@ import { randomUUID } from "node:crypto";
 import { isDeepStrictEqual } from "node:util";
 import { characterKey, validateImport } from "./import-schema.js";
 import { identityRuleset, playerName } from "../client/identity.js";
+import { repairCounterRebounds } from "./counter-repair.js";
 
 function fillEquipmentMetadata(equipment, otherEquipment) {
   return equipment.map((item, index) => {
@@ -43,6 +44,10 @@ function fillSnapshotMetadata(item, other) {
 
 function reconcileObservation(previous, candidate, kind) {
   const comparable = { ...previous, build: candidate.build, addonVersion: candidate.addonVersion };
+  if (previous.counterReboundAmount != null && candidate.counterReboundAmount == null) {
+    comparable.amount = previous.counterReboundAmount;
+    delete comparable.counterReboundAmount;
+  }
   // Lua/JSON versions can differ in the last decimal places of normalized map
   // coordinates. Compare within 1e-10, retaining the original stored reading.
   // Map, zone, position timestamp and every non-coordinate field remain exact.
@@ -81,6 +86,8 @@ function migrateCharacters(characters) {
       lastImportedAt: Math.max(previous.lastImportedAt ?? 0, candidate.lastImportedAt ?? 0) };
     const appearance = [previous.appearance, candidate.appearance].filter(Boolean).sort((a, b) => b.at - a.at)[0];
     if (appearance) result.appearance = appearance;
+    const professions = [previous.professions, candidate.professions].filter(Boolean).sort((a, b) => b.at - a.at)[0];
+    if (professions) result.professions = professions;
     for (const kind of ["snapshots", "events"]) {
       const observations = new Map(previous[kind].map((item) => [item.sourceKey, item]));
       for (const item of candidate[kind]) {
@@ -109,6 +116,7 @@ export function createTrackerStore({ dataDir, now = Date.now }) {
   // Existing imports become one profile immediately. The source file remains
   // untouched until the next successful atomic import saves the merged state.
   state.characters = migrateCharacters(state.characters);
+  for (const character of state.characters) repairCounterRebounds(character);
   const assertOpen = () => {
     if (isStopped) throw new Error("Tracker stopped");
   };
@@ -137,6 +145,9 @@ export function createTrackerStore({ dataDir, now = Date.now }) {
     if (appearance && (!character.appearance || appearance.at > character.appearance.at)) {
       character.appearance = appearance;
     }
+    if (batch.professions && (!character.professions || batch.professions.at > character.professions.at)) {
+      character.professions = batch.professions;
+    }
     let added = 0;
     for (const kind of ["snapshots", "events"]) {
       const ids = new Map(
@@ -162,6 +173,7 @@ export function createTrackerStore({ dataDir, now = Date.now }) {
       }
       character[kind].sort(observationOrder);
     }
+    repairCounterRebounds(character);
     if (
       next.characters.reduce(
         (sum, item) => sum + item.events.length + item.snapshots.length,

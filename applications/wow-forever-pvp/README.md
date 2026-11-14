@@ -167,11 +167,47 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.12.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.15.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
+## Métiers (collecteur 0.5.15)
+
+La fiche joueur propose un onglet **Métiers** avec les niveaux actuels, les
+recettes apprises et une recherche par nom de craft. La quantité fabricable
+est celle renvoyée par le jeu au moment du relevé ; une quantité indisponible
+reste « Non relevée » et zéro reste une vraie quantité.
+
+Mettre à jour le site, installer le collecteur **0.5.15**, puis ouvrir chaque
+métier en jeu et attendre le chargement de sa liste. Lancer `/cvp export`,
+puis importer le JSON sur le site. Les métiers de récolte et secondaires sont
+inclus dans les niveaux ; une liste de recettes non disponible reste indiquée
+comme non relevée. Les anciennes listes restent datées jusqu’à leur prochaine
+capture. Les recherches et filtres du panneau en jeu ne sont pas modifiés.
+
+Les niveaux utilisent les identifiants des métiers de base avec
+[C_SkillInfo.GetSkillLineInfoByID](https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/SkillInfoDocumentation.lua).
+La capture des recettes ne lit que le métier personnel chargé, en excluant les
+liens de métiers d’autres joueurs et les listes de guilde. Les quantités sont
+fournies par [C_TradeSkillUI.GetCraftableCount](https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/TradeSkillUIDocumentation.lua).
+Les API absentes, protégées ou incomplètes n’inventent pas de liste vide.
+Les anciens exports restent importables. Les métiers sont envoyés une seule
+fois par export et conservés avec leur date, indépendamment du filtre Journée.
+La collecte reste à confirmer dans le client Forever.
+
+Tests spécifiques : `node --test tests/professions.test.js` et
+`lua tests/professions.test.lua` (API simulées).
+
 ## Profils, guildes et temps de jeu
+
+Depuis la version 0.5.14, une lecture des VH à vie inférieure au dernier
+compteur confirmé est ignorée : les zéros temporaires pendant les chargements
+ne créent plus de faux gains au retour du compteur. Une période illisible
+n'est pas attribuée à une zone ou à un contexte.
+Le serveur corrige les anciens retours exacts au compteur connu dans les cinq
+secondes suivant une baisse, pour la même installation et la même session.
+Les montants d'origine restent conservés ; réimporter un ancien export ne
+rétablit pas les faux gains.
 
 Les onglets **Joueurs** et **Guildes** ouvrent des pages distinctes, avec des
 liens directs partageables. Le nom de guilde sur un profil ouvre sa fiche ;

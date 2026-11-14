@@ -1,6 +1,7 @@
 import { filterDeaths, formatPlayed, groupZones, guildKey, honorProgress, itemQuality, killLabel, listGuilds, summarize, summarizeGuild } from "./model.js";
 import { itemEnchantLabel, mountArmory, mountAvatar } from "./armory.js";
 import { statGroups, formatStat } from "./character-stats.js";
+import { professionsPanel, bindProfessionSearch } from "./professions.js";
 import { AZEROTH, mapContains, mapRegions, projectPosition } from "./map-regions.js";
 import { mapOutlines } from "./map-outlines.js";
 import { bindEquipmentTooltips, hideEquipmentTooltip } from "./item-tooltips.js";
@@ -132,6 +133,7 @@ function setProfileView(view) {
     button.setAttribute("aria-pressed", String(button.dataset.profileView === view));
   }
   $("#armory-character").hidden = view !== "character";
+  $("#armory-professions").hidden = view !== "professions";
   $("#armory-pvp").hidden = view !== "pvp";
   $("#activity").hidden = view !== "pvp";
   if (view === "character") mountCurrentArmory?.();
@@ -385,8 +387,10 @@ function render() {
     <nav class="armory-tabs" aria-label="Vues de la fiche">
       <button type="button" data-profile-view="pvp" aria-controls="armory-pvp activity">Joueur contre joueur</button>
       <button type="button" data-profile-view="character" aria-controls="armory-character">Personnage</button>
+      <button type="button" data-profile-view="professions" aria-controls="armory-professions">Métiers</button>
     </nav>
     ${armoryEquipment(latest, character)}
+    ${professionsPanel(character.professions)}
     <div id="armory-pvp" hidden>
     <section aria-labelledby="honor-points-title">
       <h3 id="honor-points-title">Points d’honneur</h3>
@@ -415,6 +419,7 @@ function render() {
     mountArmory($(".armory"), character, latest);
   };
   bindEquipmentTooltips($("#profile"), latest?.equipment ?? []);
+  bindProfessionSearch($("#profile"));
   for (const button of $(".armory").querySelectorAll("[data-profile-view]")) {
     button.addEventListener("click", () => setProfileView(button.dataset.profileView));
   }

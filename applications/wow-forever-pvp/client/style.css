@@ -1070,3 +1070,14 @@ code {
     transition: filter 0.15s;
   }
 }
+.profession-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.profession-heading h4 { margin: 0; color: #e6c891; font-size: 1.1rem; }
+.profession-heading label { display: grid; gap: .4rem; font-size: .85rem; }
+.profession-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 1rem; margin-top: 1.2rem; }
+.profession-card { min-width: 0; padding: 1.2rem; border: 1px solid #77603b; background: linear-gradient(135deg, #30291e, #181a1d); border-radius: 6px; }
+.profession-card progress { width: 100%; height: .65rem; margin: .8rem 0 1rem; accent-color: #c49a50; }
+.profession-card summary { cursor: pointer; color: #e6c891; }
+.profession-recipes { max-height: 420px; overflow: auto; }
+.profession-recipes table { width: 100%; border-collapse: collapse; }
+.profession-recipes th, .profession-recipes td { padding: .6rem .4rem; text-align: left; border-bottom: 1px solid #77603b55; }
+.profession-recipes th:last-child, .profession-recipes td:last-child { text-align: right; }

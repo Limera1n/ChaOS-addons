@@ -2,6 +2,7 @@ local ns = ChaOSWorldPvP
 local frame = CreateFrame("Frame")
 local db, profile, baseline, lastLocation, exportFrame
 local honorBaseline
+local lifetimeHighWater
 local pendingExport
 local recentKills = {}
 local isDead, elapsed = false, 0
@@ -32,6 +33,12 @@ local function honorPoints()
     end)
 end
 local function now() return read(GetServerTime) or time() end
+local function lifetimeHK()
+    local value = number(read(GetPVPLifetimeStats))
+    -- Loading screens can briefly return zero for a character with many HK.
+    -- A lifetime counter below a confirmed reading is unavailable, not a reset.
+    if value and (not lifetimeHighWater or value >= lifetimeHighWater) then return value end
+end
 local function nextId()
     db.sequence = db.sequence + 1
     return tostring(db.sequence)
@@ -344,7 +351,7 @@ local function snapshot()
     local guild = text(read(GetGuildInfo, "player"))
     local guildKnown = guild ~= nil or read(IsInGuild) == false
     append("snapshots", {
-        id = nextId(), at = now(), lifetimeHK = number(read(GetPVPLifetimeStats)),
+        id = nextId(), at = now(), lifetimeHK = lifetimeHK(),
         playedSeconds = profile.played and profile.played.seconds,
         playedAt = profile.played and profile.played.at,
         honorPoints = honorPoints(),
@@ -354,7 +361,7 @@ local function snapshot()
 end
 local function sample()
     local at, currentContext = now(), context()
-    local current = number(read(GetPVPLifetimeStats))
+    local current = lifetimeHK()
     local location = position()
     if current and baseline and baseline.value then
         local difference = current - baseline.value
@@ -367,6 +374,10 @@ local function sample()
         elseif difference < 0 then event("counter-reset", 0, currentContext) end
     end
     baseline = { value = current, at = at, context = currentContext, mapId = location and location.mapId }
+    if current then
+        lifetimeHighWater = current
+        profile.lifetimeHKHighWater = current
+    end
     local honor = honorPoints()
     if honor ~= nil and honorBaseline and honorBaseline.value ~= nil then
         local difference = honor - honorBaseline.value
@@ -412,6 +423,11 @@ local function initialize()
     -- Session boundaries never infer gains from the offline interval.
     baseline, lastLocation, pendingDeath, lastFatalTimestamp = nil, nil, nil, nil
     honorBaseline = nil
+    lifetimeHighWater = number(profile.lifetimeHKHighWater)
+    for _, observation in ipairs(profile.snapshots) do
+        local value = number(observation.lifetimeHK)
+        if value then lifetimeHighWater = math.max(lifetimeHighWater or 0, value) end
+    end
     recentKills = {}
     barberSession = nil
     pendingExport = nil
@@ -444,7 +460,9 @@ local function showExport()
     end
     -- SavedVariables do not preserve metatables; mark arrays again before encoding.
     for _, item in ipairs(profile.snapshots) do ns.Array(item.equipment) end
+    ns.CaptureRecipes(profile, now())
     local payload = {
+        professions = ns.CollectProfessions(profile, now()),
         format = "chaos-world-pvp", version = 1, sourceId = db.sourceId,
         addonVersion = ns.version, build = read(function()
             local version, build = GetBuildInfo()
@@ -482,7 +500,11 @@ frame:SetScript("OnEvent", function(_, name, ...)
     if name == "PLAYER_LOGIN" then initialize(); return end
     if not profile or not db then return end
     local success = ...
-    if name == "TIME_PLAYED_MSG" then
+    if name == "TRADE_SKILL_SHOW" or name == "TRADE_SKILL_LIST_UPDATE" or name == "TRADE_SKILL_DATA_SOURCE_CHANGED" then
+        ns.CaptureRecipes(profile, now())
+    elseif name == "SKILL_LINES_CHANGED" then
+        ns.CollectProfessions(profile, now())
+    elseif name == "TIME_PLAYED_MSG" then
         local seconds = number(read(function() return success end))
         if seconds and seconds % 1 == 0 and seconds <= 4102444800 then
             profile.played = { seconds = seconds, at = now() }
@@ -536,6 +558,9 @@ frame:RegisterEvent("CURRENCY_DISPLAY_UPDATE")
 frame:RegisterEvent("PARTY_KILL")
 frame:RegisterEvent("TIME_PLAYED_MSG")
 frame:RegisterEvent("PLAYER_GUILD_UPDATE")
+for _, name in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED", "SKILL_LINES_CHANGED" }) do
+    pcall(frame.RegisterEvent, frame, name)
+end
 -- Forever blocks combat-log event registration. pcall cannot prevent the
 -- protected-action warning, so use the death recap without probing this event.
 frame:SetScript("OnUpdate", function(_, delta)

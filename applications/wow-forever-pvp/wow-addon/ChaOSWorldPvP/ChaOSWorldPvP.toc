@@ -2,7 +2,8 @@
 ## Title: ChaOS World PvP
 ## Notes: Experimental world PvP observations and manual export for ChaOS.
 ## Author: THOMZY
-## Version: 0.5.13
+## Version: 0.5.15
 ## SavedVariables: ChaOSWorldPvPDB
 json.lua
+professions.lua
 collector.lua
