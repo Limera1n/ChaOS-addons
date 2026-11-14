@@ -887,6 +887,11 @@ select {
 #map.is-dragging, #map.is-dragging * { cursor: grabbing; }
 #map:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
 #map-zoom-in:disabled { cursor: default; opacity: .5; }
+.map-detail-tile { opacity: 0; transition: opacity 160ms ease-out; }
+.map-detail-tile.is-loaded { opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .map-detail-tile { transition: none; }
+}
 #map-target {
   position: absolute;
   bottom: 12px;

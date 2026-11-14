@@ -97,8 +97,13 @@ Les filtres de période, de personnage et de session restent appliqués aux marq
 Les VH, coups fatals et morts gardent une taille lisible pendant le zoom.
 Les zones sans position connue sur Azeroth conservent leur carte séparée.
 
-Un seul fond `client/maps/openmap/overview.webp` (6012 × 4008) contient les zones
-assemblées ; le jeu n’est pas nécessaire sur le serveur. Le zoom est progressif,
+Le fond `client/maps/openmap/overview.webp` (3006 × 2004) fournit la vue globale.
+Au zoom, les tuiles WebP sans perte issues d’OpenMap affichent les pixels d’origine
+sans réduction ni compression supplémentaire avec perte (canevas 16032 × 10688).
+Seules les tuiles visibles et une petite marge sont chargées, en tenant compte
+de la densité de pixels de l’écran. Un cache limité conserve les tuiles récentes
+pendant les déplacements. L’overview reste visible pendant le chargement.
+Le jeu n’est pas nécessaire sur le serveur. Le zoom est progressif,
 centré sur le curseur, et accepte aussi le pincement tactile. Un double-clic
 rapproche la vue, Maj + double-clic l’éloigne. Le survol indique la zone et ses
 coordonnées sans colorer la carte ni modifier les filtres. La détection utilise

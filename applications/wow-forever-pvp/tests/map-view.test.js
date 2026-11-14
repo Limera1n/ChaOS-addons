@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { worldRect, zoomView, constrainView, regionAt, easeView } from "../client/map-view.js";
+import { worldRect, zoomView, constrainView, regionAt, easeView, visibleMapTiles } from "../client/map-view.js";
+import { readFileSync } from "node:fs";
 import { AZEROTH, projectPosition } from "../client/map-regions.js";
 
 test("zone art and event positions use the same world coordinates", () => {
@@ -49,4 +50,22 @@ test("smooth zoom converges without overshoot and preserves the cursor anchor th
     view = next;
   }
   assert.deepEqual(view, target);
+});
+
+test("HD detail uses native, adjoining tiles and loads only near the viewport", () => {
+  const art = JSON.parse(readFileSync(new URL("../client/maps/openmap/tiles.json", import.meta.url)));
+  assert.deepEqual(visibleMapTiles(worldRect(AZEROTH), art, 900), []);
+  const rect = worldRect("1420");
+  const tiles = visibleMapTiles(rect, art, 900);
+  assert.ok(tiles.length > 0 && tiles.length < art.tiles.length / 4);
+  const width = 510 / 16 / 1002 * 150;
+  for (const tile of tiles) {
+    assert.equal(tile.width, width);
+    assert.ok(Math.abs(tile.height-width) < 1e-12);
+    assert.equal(tile.x, tile.col*width);
+    assert.ok(readFileSync(new URL(`../client/maps/openmap/${tile.col}_${tile.row}.webp`, import.meta.url)).length > 0);
+  }
+  assert.deepEqual(visibleMapTiles(rect, art, 100), []);
+  assert.ok(visibleMapTiles({ x: 60, y: 20, width: 90, height: 60 }, art, 1200*2).length > 0,
+    "high-density displays receive detail sooner");
 });

@@ -4,6 +4,7 @@ Usage: python scripts/import-openmap.py "E:/.../Interface/AddOns/OpenMap"
 The game textures retain their original ownership; see maps/openmap/NOTICE.md.
 """
 import re
+import json
 import sys
 import struct
 from pathlib import Path
@@ -16,7 +17,7 @@ textures = source / "Media/Textures/Forever"
 data = (source / "Data/Forever/ZoneArt.lua").read_text()
 keys = list(map(int, re.findall(r"\d+", data.split("column i, row j", 1)[1])))
 # OpenMap's world canvas is 1002 x 668; each tile covers 510/16 units.
-SCALE = 6  # One 6012 x 4008 image, with enough detail to explore individual zones.
+SCALE = 3  # Lightweight global view; native-resolution tiles supply zoom detail.
 overview = Image.new("RGBA", (1002 * SCALE, 668 * SCALE))
 base = Image.new("RGBA", (1024, 768))
 for index in range(12):
@@ -33,10 +34,16 @@ for key in keys:
     # Pillow's native BC3 decoder avoids its much slower Python BLP decoder.
     with Image.frombytes("RGBA", (width, height), data[offset:offset+length], "bcn", 3) as raw:
         tile = raw.crop((1, 1, 511, 511))
+        # Preserve every decoded source pixel: no resizing or second lossy pass.
+        tile.save(target / f"{col}_{row}.webp", lossless=True, method=2)
         left, top = round(col * 510 * SCALE / 16), round(row * 510 * SCALE / 16)
         right, bottom = round((col + 1) * 510 * SCALE / 16), round((row + 1) * 510 * SCALE / 16)
         overview.alpha_composite(tile.resize((right-left, bottom-top), Image.Resampling.LANCZOS), (left, top))
 overview.convert("RGB").save(target / "overview.webp", quality=90, method=2)
+(target / "tiles.json").write_text(json.dumps({
+    "worldWidth": 1002, "worldHeight": 668, "pixelsPerUnit": 16,
+    "tilePixels": 510, "overviewWidth": overview.width, "tiles": keys,
+}), encoding="utf-8")
 (target / "LICENSE.txt").write_text((source / "LICENSE.txt").read_text())
 (target / "NOTICE.md").write_text(
     "# OpenMap map art\n\nConverted from the installed OpenMap Forever addon with scripts/import-openmap.py.\n"
@@ -48,4 +55,4 @@ overview.convert("RGB").save(target / "overview.webp", quality=90, method=2)
     "The source texture provenance is reproduced in SOURCE-NOTICE.md. "
     "OpenMap software/data: Copyright (c) 2026 OpenMap contributors; see LICENSE.txt.\n")
 (target / "SOURCE-NOTICE.md").write_text((textures / "NOTICE.md").read_text())
-print(f"Composited {len(keys)} source tiles into {target / 'overview.webp'}")
+print(f"Converted {len(keys)} native lossless tiles and overview to {target}")

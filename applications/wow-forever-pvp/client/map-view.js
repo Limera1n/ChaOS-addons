@@ -3,7 +3,23 @@ import { mapOutlines } from "./map-outlines.js";
 
 const NS = "http://www.w3.org/2000/svg";
 const OVERVIEW = new URL("./maps/openmap/overview.webp", import.meta.url).href;
+const ART = new URL("./maps/openmap/", import.meta.url).href;
 const MIN_WIDTH = 150 / 24;
+
+export function visibleMapTiles(view, art, screenWidth) {
+  if (!art || screenWidth <= art.overviewWidth * view.width / 150 * .9) return [];
+  const width = art.tilePixels / art.pixelsPerUnit / art.worldWidth * 150;
+  const height = art.tilePixels / art.pixelsPerUnit / art.worldHeight * 100;
+  // A small margin preloads the next pieces before a pan brings them on screen.
+  const margin = Math.min(width, view.width * .15);
+  return art.tiles.flatMap((key) => {
+    const col = Math.floor(key / 256), row = key % 256;
+    const x = col * width, y = row * height;
+    return x+width >= view.x-margin && x <= view.x+view.width+margin &&
+      y+height >= view.y-margin && y <= view.y+view.height+margin
+      ? [{ key, col, row, x, y, width, height }] : [];
+  });
+}
 
 export function worldRect(id) {
   if (id === AZEROTH) return { x: 0, y: 0, width: 150, height: 100 };
@@ -78,14 +94,50 @@ export function createMapView(root) {
   const overview = svg("image", { href: OVERVIEW, width: 150, height: 100,
     preserveAspectRatio: "none", "aria-hidden": "true", "pointer-events": "none" });
   const content = svg("g");
-  root.append(overview, content);
+  const detail = svg("g", { "aria-hidden": "true", "pointer-events": "none" });
+  root.append(overview, detail, content);
   const label = document.querySelector("#map-target");
   const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
   let selected = null, localRect = worldRect(AZEROTH), standalone = false;
   let view = worldRect(AZEROTH), target = { ...view }, drag = null, moved = false;
   let frame = 0, lastFrame = 0, cursor = null, pinch = null;
   const pointers = new Map();
+  const tileNodes = new Map();
+  let art = null, tileClock = 0;
+  fetch(`${ART}tiles.json`).then((response) => {
+    if (!response.ok) throw new Error("Map detail unavailable");
+    return response.json();
+  }).then((manifest) => { art = manifest; update(); }).catch(() => {
+    root.dispatchEvent(new CustomEvent("map-art-error"));
+  });
   overview.addEventListener("error", () => root.dispatchEvent(new CustomEvent("map-art-error")));
+
+  function updateTiles() {
+    const tiles = standalone ? [] : visibleMapTiles(view, art, root.clientWidth * (window.devicePixelRatio || 1));
+    const needed = new Set(tiles.map((tile) => tile.key));
+    for (const tile of tiles) {
+      let record = tileNodes.get(tile.key);
+      if (!record) {
+        const node = svg("image", { href: `${ART}${tile.col}_${tile.row}.webp`,
+          x: tile.x, y: tile.y, width: tile.width, height: tile.height,
+          preserveAspectRatio: "none", class: "map-detail-tile" });
+        node.addEventListener("load", () => node.classList.add("is-loaded"), { once: true });
+        // Keep the overview visible underneath if any tile fails to load.
+        node.addEventListener("error", () => root.dispatchEvent(new CustomEvent("map-art-error")), { once: true });
+        record = { node, used: 0 };
+        tileNodes.set(tile.key, record);
+        detail.append(node);
+      }
+      record.used = ++tileClock;
+      record.node.style.display = "";
+    }
+    const hidden = [...tileNodes].filter(([key]) => !needed.has(key)).sort((a, b) => b[1].used-a[1].used);
+    for (const [index, [key, record]] of hidden.entries()) {
+      // Retain recent pieces for back-and-forth panning, with a bounded cache.
+      if (index < Math.max(0, 64-needed.size)) record.node.style.display = "none";
+      else { record.node.remove(); tileNodes.delete(key); }
+    }
+  }
 
   function showRegion() {
     if (!cursor || drag || pointers.size > 1) { label.hidden = true; return; }
@@ -102,6 +154,7 @@ export function createMapView(root) {
   }
   function update() {
     root.setAttribute("viewBox", `${view.x} ${view.y} ${view.width} ${view.height}`);
+    updateTiles();
     const markerScale = view.width / localRect.width;
     for (const marker of content.querySelectorAll("[data-map-marker]"))
       marker.setAttribute("transform", `${marker.dataset.mapMarker} scale(${markerScale})`);
@@ -198,6 +251,7 @@ export function createMapView(root) {
     if (pan) moveTo({ ...target, x: target.x+pan[0]*target.width*.15,
       y: target.y+pan[1]*target.height*.15 });
   });
+  new ResizeObserver(update).observe(root);
   return {
     content, zoom,
     reset() { moveTo(worldRect(AZEROTH)); },
