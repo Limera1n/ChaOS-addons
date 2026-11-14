@@ -232,7 +232,20 @@ export function validateImport(input) {
   record(input);
   if (input.format !== "chaos-world-pvp" || input.version !== 1) fail();
   const character = record(input.character);
-  const equipmentSets = input.equipmentSets == null ? null : list(input.equipmentSets, 300).map((items) => list(items, 19));
+  const equipmentItems = input.equipmentItems == null ? null : list(input.equipmentItems, 5700);
+  const statsSets = input.statsSets == null ? null : list(input.statsSets, 300);
+  function reference(value, values) {
+    if (!values) fail();
+    const index = integer(value, values.length - 1);
+    return record(values[index]);
+  }
+  function snapshotStats(item) {
+    if (item.statsRef == null) return item.stats;
+    if (item.stats != null) fail();
+    return reference(item.statsRef, statsSets);
+  }
+  const equipmentSets = input.equipmentSets == null ? null : list(input.equipmentSets, 300).map((items) =>
+    list(items, 19).map((item) => equipmentItems == null ? item : reference(item, equipmentItems)));
   const result = {
     format: input.format,
     version: 1,
@@ -272,7 +285,7 @@ export function validateImport(input) {
   result.snapshots = list(input.snapshots, 300).map((item) => ({
     ...identity(item),
     ...playedTime(item),
-    ...characterStats(item.stats),
+    ...characterStats(snapshotStats(item)),
     lifetimeHK:
       item.lifetimeHK == null ? null : integer(item.lifetimeHK, 1000000000),
     ...(item.honorPoints == null ? {} : { honorPoints: integer(item.honorPoints, 100000000) }),

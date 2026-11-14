@@ -144,10 +144,13 @@ async function showTooltip(row, item) {
   addLine(title, "tooltip-name");
   if (item.detail) addLine({ text: item.detail }, "tooltip-source");
   if (item.tooltip?.length) {
+    let isTransmogName = false;
     for (const line of item.tooltip) {
       // Spell tooltips can omit reagent counts. Use the recipe's structured costs.
       if (item.recipe && /^(?:reagents|composants|réactifs)\s*:/iu.test(line.text.trim())) continue;
-      addLine(line);
+      const isTransmogHeader = /^(?:Transmogrified to|Transmogrifié en|Transmogrification)\s*:/iu.test(line.text.trim());
+      addLine(line, isTransmogHeader || isTransmogName ? "tooltip-line tooltip-transmog" : undefined);
+      isTransmogName = isTransmogHeader && /:\s*$/u.test(line.text);
     }
     addRecipeReagents(item);
     positionTooltip();

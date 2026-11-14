@@ -278,6 +278,86 @@ C_Transmog = nil
 assert(capturedTransmog() == nil, "Older clients without transmog APIs still export")
 C_Transmog = savedTransmog
 appliedVisual = 88
+-- Forever's slot UI may return zero while the equipped item is transmogged.
+local equippedSource, hiddenSource = 99, false
+ItemLocation = { CreateFromEquipmentSlot = function(_, slot) return { equipmentSlot = slot } end }
+C_Item.GetAppliedItemTransmogInfo = function(location)
+    assert(location.equipmentSlot == 1)
+    return { appearanceID = equippedSource }
+end
+C_TransmogCollection.GetSourceInfo = function(source)
+    assert(source == 99)
+    return { isHideVisual = hiddenSource, itemAppearanceID = 88 }
+end
+appliedSource = 0
+assert(capturedTransmog() == 456, "Equipped transmog wins over an empty slot UI cache")
+hiddenSource = true
+assert(capturedTransmog() == 0, "Hidden helm must be exported as hidden, not as the equipped helm")
+hiddenSource = false
+equippedSource = 0
+appliedSource = 99
+assert(capturedTransmog() == 123, "Removing the equipped transmog must ignore stale UI choices")
+equippedSource = secret
+assert(capturedTransmog() == nil, "Restricted equipped appearances must not use stale UI choices")
+equippedSource = 99
+C_TransmogCollection.GetAppearanceSourceInfo = function() return { itemAppearanceID = 55 } end
+assert(capturedTransmog() == 0, "Hidden visuals remain supported without the source flag")
+C_Item.GetAppliedItemTransmogInfo = function() error("API unavailable") end
+assert(capturedTransmog() == 456, "Unavailable equipped API retains the legacy fallback")
+C_Item.GetAppliedItemTransmogInfo = nil
+ItemLocation = nil
+C_TransmogCollection.GetAppearanceSourceInfo = nil
+C_TransmogCollection.GetSourceInfo = nil
+-- Measured on Forever 70938: item APIs return base sources while Dress() reads
+-- the active outfit, including a cape with no transmog text in its tooltip.
+local originalCreateFrame, originalInventory, originalSourceItem = CreateFrame, GetInventoryItemID, C_Transmog.GetItemIDForSource
+local modelSources = { [1] = 77344, [5] = 161283, [15] = 160112 }
+local outfitModel
+local geometryReady = true
+C_TransmogOutfitInfo = { GetActiveOutfitID = function() return 2 end }
+function CreateFrame(kind, ...)
+    if kind ~= "DressUpModel" then return originalCreateFrame(kind, ...) end
+    assert(not outfitModel, "Reuse one dedicated model")
+    outfitModel = widget()
+    function outfitModel:SetUseTransmogSkin(enabled) assert(enabled == true) end
+    function outfitModel:SetUseTransmogChoices(enabled) assert(enabled == true) end
+    function outfitModel:SetUnit(unit) assert(unit == "player") end
+    function outfitModel:IsGeoReady() return geometryReady end
+    function outfitModel:GetItemTransmogInfo(slot)
+        return modelSources and modelSources[slot] and { appearanceID = modelSources[slot] } or nil
+    end
+    return outfitModel
+end
+function GetInventoryItemID(_, slot) return ({ [1] = 123, [5] = 4324, [15] = 271719, [18] = 11288 })[slot] end
+C_Transmog.GetItemIDForSource = function(source)
+    return ({ [77344] = 134110, [161283] = 14150, [160112] = 10638 })[source]
+end
+C_TransmogCollection.GetSourceInfo = function(source)
+    return { isHideVisual = source == 77344 }
+end
+SlashCmdList.CHAOSWORLDPVP("export")
+local dressed = profile.snapshots[#profile.snapshots].equipment
+assert(dressed[1].transmogItemId == 0, "SourceInfo hides the helm even when IsAppearanceHiddenVisual is false")
+assert(dressed[2].itemId == 4324 and dressed[2].transmogItemId == 14150)
+assert(dressed[3].itemId == 271719 and dressed[3].transmogItemId == 10638, "Collect cape from active outfit without parsing names")
+assert(dressed[4].slot == 18, "A loaded model must export even when an equipped wand has no model source")
+local originalAfter, retryModel = C_Timer.After
+C_Timer.After = function(delay, callback) if delay == 0.1 then retryModel = callback end end
+geometryReady = false
+local beforeLoading = #profile.snapshots
+SlashCmdList.CHAOSWORLDPVP("export")
+assert(#profile.snapshots == beforeLoading, "Wait while model geometry is still loading")
+geometryReady = true
+retryModel()
+assert(#profile.snapshots == beforeLoading + 1, "Export once geometry is ready despite the missing wand source")
+C_Timer.After = originalAfter
+modelSources[15] = 161283
+SlashCmdList.CHAOSWORLDPVP("export")
+assert(profile.snapshots[#profile.snapshots].equipment[3].transmogItemId == 14150, "Refresh outfit appearances on the next export")
+modelSources = nil
+CreateFrame, GetInventoryItemID, C_Transmog.GetItemIDForSource = originalCreateFrame, originalInventory, originalSourceItem
+C_TransmogOutfitInfo = nil
+C_TransmogCollection.GetSourceInfo = nil
 C_TooltipInfo = { GetInventoryItem = function()
     return { lines = {
         { leftText = "Test Hat" },
@@ -293,6 +373,25 @@ for _, value in ipairs(frames) do
 end
 assert(type(payload) == "string" and payload:find('"format":"chaos%-world%-pvp"'))
 assert(payload:find('"equipmentSets":%[') and payload:find('"equipmentRef":'))
+assert(payload:find('"equipmentItems":%[') and payload:find('"statsSets":%['))
+do
+    local ns = ChaOSWorldPvP
+    local hat = { slot = 1, itemId = 123, link = "|Hitem:123|h[Hat]|h" }
+    local other = { slot = 2, itemId = 456 }
+    local history = {
+        { id = "a", equipment = ns.Array({ hat }), stats = { health = 123 } },
+        { id = "b", equipment = ns.Array({ hat, other }), stats = { health = 123 } },
+        { id = "c", equipment = ns.Array({ hat }) },
+    }
+    local before = ns.Encode(ns.Array(history))
+    local observations, sets, items, stats = ns.CompactSnapshots(history)
+    assert(#observations == 3 and #sets == 2 and #items == 2 and #stats == 1)
+    assert(observations[1].equipmentRef == 0 and observations[3].equipmentRef == 0)
+    assert(sets[1][1] == 0 and sets[2][1] == 0 and sets[2][2] == 1)
+    assert(observations[1].statsRef == 0 and observations[2].statsRef == 0)
+    assert(observations[3].statsRef == nil and observations[1].stats == nil)
+    assert(ns.Encode(ns.Array(history)) == before, "Compaction must not rewrite saved history")
+end
 assert(payload:find('"honorPoints":0') and payload:find('"honor%-points%-gain"'))
 assert(payload:find('"victim":"Victim%-Other Realm"') and payload:find('"type":"player%-kill"'))
 assert(payload:find('"raceId":1') and payload:find('"sex":3'))

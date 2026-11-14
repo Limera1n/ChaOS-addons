@@ -1,24 +1,35 @@
-ChaOSWorldPvP = { version = "0.5.21" }
+ChaOSWorldPvP = { version = "0.5.25" }
 local ns = ChaOSWorldPvP
 -- Send each distinct loadout once, while retaining every dated observation.
 -- Copy snapshot metadata so exporting never rewrites SavedVariables history.
 function ns.CompactSnapshots(snapshots)
     local result, sets = ns.Array(), ns.Array()
-    local known = {}
-    for _, snapshot in ipairs(snapshots) do
-        local encoded = ns.Encode(ns.Array(snapshot.equipment))
-        local reference = known[encoded]
+    local items, stats = ns.Array(), ns.Array()
+    local known, knownItems, knownStats = {}, {}, {}
+    local function intern(value, values, lookup)
+        local encoded = ns.Encode(value)
+        local reference = lookup[encoded]
         if reference == nil then
-            reference = #sets
-            known[encoded] = reference
-            sets[#sets + 1] = snapshot.equipment
+            reference = #values
+            lookup[encoded] = reference
+            values[#values + 1] = value
+        end
+        return reference
+    end
+    for _, snapshot in ipairs(snapshots) do
+        local equipment = ns.Array()
+        for _, item in ipairs(snapshot.equipment) do
+            equipment[#equipment + 1] = intern(item, items, knownItems)
         end
         local copy = {}
-        for key, value in pairs(snapshot) do if key ~= "equipment" then copy[key] = value end end
-        copy.equipmentRef = reference
+        for key, value in pairs(snapshot) do
+            if key ~= "equipment" and key ~= "stats" then copy[key] = value end
+        end
+        copy.equipmentRef = intern(equipment, sets, known)
+        if snapshot.stats ~= nil then copy.statsRef = intern(snapshot.stats, stats, knownStats) end
         result[#result + 1] = copy
     end
-    return result, sets
+    return result, sets, items, stats
 end
 local arrayMeta = {}
 function ns.Array(value) return setmetatable(value or {}, arrayMeta) end

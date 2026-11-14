@@ -590,6 +590,7 @@ select {
   gap: 12px;
 }
 .tooltip-effect { color: #6be553; }
+.tooltip-transmog { color: #ff80ff; }
 .tooltip-reagent { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 5px; margin-top: 4px; }
 .tooltip-reagent-option { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .tooltip-reagent-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 18px; overflow: hidden; border: 1px solid #8d7951; border-radius: 2px; background: #232528; box-sizing: content-box; }

@@ -199,7 +199,7 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.21.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.25.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
@@ -393,6 +393,12 @@ fois chaque équipement distinct dans `equipmentSets`. Chaque relevé utilise
 un `equipmentRef` indexé à partir de zéro. Le serveur reconstruit les mêmes
 objets avant validation et sauvegarde ; l’historique local n’est pas modifié.
 Les infobulles complètes restent limitées à l’équipement actuel.
+Depuis **0.5.25**, `equipmentSets` référence les objets distincts de
+`equipmentItems`, et les relevés référencent leurs statistiques via `statsRef`
+et `statsSets` (indices à partir de zéro). Les données sont dédupliquées sans
+supprimer de relevé ni modifier les liens, enchantements ou infobulles.
+**Mettre le site à jour avant l’addon 0.5.25** ; le nouveau site accepte aussi
+les anciens exports.
 Depuis **0.5.12**, le réimport tolère jusqu’à `1e-10` d’écart sur les coordonnées
 normalisées X/Y d’une observation déjà enregistrée, pour absorber les écarts
 de dernière décimale entre sérialiseurs Lua/JSON. Les coordonnées originales
@@ -500,12 +506,34 @@ désormais ces fichiers suivis, y compris sans déclaration `data` dans le manif
   prévue pour un seul processus ; ne pas lancer plusieurs instances sur le même
   fichier. Pas de fusion automatique de plusieurs installations d'un personnage.
 - Le portrait reprend les choix capturés au barbier et reconnus par le modèle.
+  Depuis le collecteur 0.5.23, un `DressUpModel` dédié, habillé avec la tenue
+  visible du joueur, fournit les sources de chaque pièce. Les lectures sur
+  `C_Item.GetAppliedItemTransmogInfo` et `GetCurrentItemTransmogInfo` renvoient
+  les objets de base sur le build Forever 70938 lorsque la tenue est active :
+  ce ne sont pas les sources affichées. Ce comportement a été reproduit en jeu,
+  notamment pour une cape `271719` affichée avec la source `160112` (objet `10638`).
+  Le modèle reste hors écran, ne touche pas à la fenêtre du vestiaire et n’applique
+  aucune modification d’équipement ou de tenue. Depuis la version 0.5.24,
+  l’export attend `IsGeoReady()` : une baguette équipée en emplacement 18 peut
+  ne fournir aucune source même lorsque le modèle est entièrement chargé.
+  Le marqueur `GetSourceInfo(...).isHideVisual` masque les pièces invisibles
+  (`transmogItemId: 0`), même si `IsAppearanceHiddenVisual` renvoie faux.
+  Les API d’objet restent un repli pour les anciens clients sans tenues.
+  Pour les anciens exports, le site peut utiliser le nom qui suit
+  « Transmogrified to: » dans l’infobulle exportée :
+  une correspondance exacte et unique dans le catalogue Forever de Zephras
+  fournit l’objet visuel ; « Hidden Helm » masque le casque. Seuls les préfixes
+  du catalogue sont téléchargés, aucune donnée de personnage n’est envoyée.
+  Cette résolution concerne le modèle et le portrait sans réécrire les relevés
+  stockés ni remplacer les objets réels des infobulles. Les noms ambigus ou
+  introuvables sont signalés. Un export sans identifiant visuel correct ni
+  mention de transmog dans l’infobulle nécessite un nouvel export en jeu.
   Les nouveaux exports relèvent aussi les transmogrifications appliquées et les
   pièces masquées, sans modifier les objets des infobulles. Après mise à jour
   de l’addon en jeu, refaire `/cvp export` puis importer le résultat sur le site.
   Les anciens exports utilisent les objets équipés. La collecte utilise
   [l’API transmog du client Forever](https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/TransmogDocumentation.lua)
-  et reste à valider en jeu.
+  et la lecture du modèle du personnage, vérifiée sur le client 1.60.1/70938.
   Les choix sans équivalent HD/SD et les objets sans modèle sont signalés.
   Un relevé sans capture du barbier utilise l’apparence par défaut.
 - Rang, points de rang, talents et victimes des simples participations restent à

@@ -267,6 +267,8 @@ export function mountArmory(panel, character, snapshot) {
     status.textContent = params.get("a").includes(".")
       ? "Apparence relevée au barbier."
       : "Apparence par défaut. Ouvre le barbier en jeu, puis refais un export.";
+    if (snapshot?.equipment?.some((item) => item.transmogUnresolved))
+      status.textContent += " Certaines transmogrifications n’ont pas pu être identifiées dans le catalogue.";
     const frame = document.createElement("iframe");
     frame.title = `Modèle 3D de ${character.name}`;
     frame.referrerPolicy = "no-referrer";

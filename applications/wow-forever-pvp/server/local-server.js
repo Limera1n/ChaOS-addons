@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createTrackerStore } from "./store.js";
+import { resolveStateTransmogs } from "./transmog.js";
 import { MAX_IMPORT_BYTES } from "./import-schema.js";
 import { API_PATH, IMPORT_TYPE, importErrorStatus } from "./routes.js";
 import { ARMORY_VIEW_PATH } from "../client/armory.js";
@@ -80,7 +81,7 @@ export function createLocalServer({
       return response.end(asset.body);
     }
     if (request.method === "GET" && request.url === API_PATH + "/state")
-      return reply(200, store.read());
+      return reply(200, await resolveStateTransmogs(store.read()));
     if (request.method !== "POST" || request.url !== API_PATH + "/import")
       return reply(404, { error: "Introuvable." });
     if (

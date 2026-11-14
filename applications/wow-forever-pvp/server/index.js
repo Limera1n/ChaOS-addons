@@ -6,6 +6,7 @@ import { fileURLToPath } from "node:url";
 import { defineFeature } from "../../../../server/core/features.js";
 import { requireAccount, requireSameOrigin } from "../../../../server/api/auth.js";
 import { createTrackerStore } from "./store.js";
+import { resolveStateTransmogs } from "./transmog.js";
 import { MAX_IMPORT_BYTES } from "./import-schema.js";
 import { API_PATH, IMPORT_TYPE, importErrorStatus } from "./routes.js";
 import { ARMORY_VIEW_PATH } from "../client/armory.js";
@@ -27,8 +28,8 @@ export function createWowForeverPvpFeature({
       app.get(ARMORY_METADATA_PATH, apiLimiter, serveArmoryMetadata);
       app.get(new RegExp(`^${ARMORY_ASSET_PATH}`), serveArmoryAsset);
       app.get(ITEM_TOOLTIP_PATH, apiLimiter, serveItemTooltips);
-      app.get(API_PATH + "/state", apiLimiter, (_request, response) => {
-        response.json(openStore().read());
+      app.get(API_PATH + "/state", apiLimiter, async (_request, response) => {
+        response.json(await resolveStateTransmogs(openStore().read()));
       });
       app.post(
         API_PATH + "/import",

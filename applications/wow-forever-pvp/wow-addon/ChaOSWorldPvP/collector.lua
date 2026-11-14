@@ -199,8 +199,59 @@ local function equippedTooltip(slot)
         if #result > 0 then return result end
     end)
 end
+local visualModel
+local function refreshVisualModel()
+    -- Forever outfits are separate from item transmogs. A dedicated dressed
+    -- player model exposes the displayed outfit without changing the wardrobe.
+    if not C_TransmogOutfitInfo or not C_TransmogOutfitInfo.GetActiveOutfitID then return end
+    read(function()
+        if not visualModel then
+            local model = CreateFrame("DressUpModel", nil, UIParent)
+            if type(model.GetItemTransmogInfo) ~= "function" then return end
+            model:SetSize(100, 100)
+            model:SetPoint("TOPLEFT", UIParent, "BOTTOMLEFT", 0, -100)
+            model:SetAutoDress(true)
+            model:SetUseTransmogSkin(true)
+            model:SetUseTransmogChoices(true)
+            visualModel = model
+        end
+        visualModel:Show()
+        visualModel:SetUnit("player")
+        visualModel:Dress()
+    end)
+end
+local function visualSource(slot)
+    local info = visualModel and read(visualModel.GetItemTransmogInfo, visualModel, slot)
+    return type(info) == "table" and number(read(function() return info.appearanceID end)) or nil
+end
+local function visualModelReady()
+    if not visualModel or not C_TransmogOutfitInfo then return true end
+    -- Equipped slots can legitimately have no model source (Forever wands in
+    -- slot 18, for example). Only the engine knows whether geometry is ready.
+    return read(visualModel.IsGeoReady, visualModel) == true
+end
+local function sourceItem(source, itemId)
+    if not source then return nil end
+    if source == 0 then return itemId end
+    local details = read(C_TransmogCollection and C_TransmogCollection.GetSourceInfo, source)
+    if details and read(function() return details.isHideVisual end) == true then return 0 end
+    local appearance = read(C_TransmogCollection and C_TransmogCollection.GetAppearanceSourceInfo, source)
+    local visual = appearance and number(read(function() return appearance.itemAppearanceID end))
+    if visual and read(C_TransmogCollection and C_TransmogCollection.IsAppearanceHiddenVisual, visual) == true then return 0 end
+    local applied = number(read(C_Transmog and C_Transmog.GetItemIDForSource, source))
+    if applied and applied > 0 and applied % 1 == 0 and applied <= 1000000000 then return applied end
+end
 local function transmogItem(slot, itemId)
     return read(function()
+        local displayed = visualSource(slot)
+        if displayed ~= nil then return sourceItem(displayed, itemId) end
+        -- Legacy clients without outfit/model support still use item transmogs.
+        local location = ItemLocation and read(ItemLocation.CreateFromEquipmentSlot, ItemLocation, slot)
+        local equipped = location and read(C_Item and C_Item.GetAppliedItemTransmogInfo, location)
+        if type(equipped) == "table" then
+            local source = number(read(function() return equipped.appearanceID end))
+            return sourceItem(source, itemId)
+        end
         if not C_Transmog or not Enum or not Enum.TransmogType or not Enum.TransmogModification then return nil end
         local info = read(C_Transmog.GetSlotVisualInfo, {
             slotID = slot, type = Enum.TransmogType.Appearance,
@@ -437,7 +488,15 @@ local function initialize()
     event("session-start")
     read(RequestTimePlayed)
 end
-local function showExport()
+local function showExport(attempt)
+    if not visualModelReady() then
+        if C_Timer and C_Timer.After and (attempt or 0) < 20 then
+            C_Timer.After(0.1, function() showExport((attempt or 0) + 1) end)
+        else
+            print("ChaOS PvP: outfit model not ready. Try /cvp export again in a few seconds.")
+        end
+        return
+    end
     captureAppearance()
     snapshot()
     local currentEquipment = profile.snapshots[#profile.snapshots].equipment
@@ -475,7 +534,7 @@ local function showExport()
     exportFrame:Show()
     -- Only the current equipment needs full tooltips. Keep past snapshots compact.
     for _, item in ipairs(currentEquipment) do item.tooltip = equippedTooltip(item.slot) end
-    payload.snapshots, payload.equipmentSets = ns.CompactSnapshots(profile.snapshots)
+    payload.snapshots, payload.equipmentSets, payload.equipmentItems, payload.statsSets = ns.CompactSnapshots(profile.snapshots)
     local encoded = ns.Encode(payload)
     for _, item in ipairs(currentEquipment) do item.tooltip = nil end
     exportFrame.edit:SetText(encoded)
@@ -484,6 +543,7 @@ local function showExport()
     if profile.dropped then print("ChaOS PvP: local retention limit reached; older observations omitted: " .. profile.dropped) end
 end
 local function requestExport()
+    refreshVisualModel()
     sample()
     local request = {}
     pendingExport = request
@@ -501,7 +561,9 @@ frame:SetScript("OnEvent", function(_, name, ...)
     if name == "PLAYER_LOGIN" then initialize(); return end
     if not profile or not db then return end
     local success = ...
-    if name == "TRAIT_CONFIG_UPDATED" or name == "PLAYER_TALENT_UPDATE" or name == "ACTIVE_TALENT_GROUP_CHANGED" then
+    if name == "PLAYER_EQUIPMENT_CHANGED" or name == "TRANSMOG_DISPLAYED_OUTFIT_CHANGED" or name == "PLAYER_ENTERING_WORLD" then
+        refreshVisualModel()
+    elseif name == "TRAIT_CONFIG_UPDATED" or name == "PLAYER_TALENT_UPDATE" or name == "ACTIVE_TALENT_GROUP_CHANGED" then
         ns.CaptureTalents(profile, now())
     elseif name == "TRADE_SKILL_SHOW" or name == "TRADE_SKILL_LIST_UPDATE" or name == "TRADE_SKILL_DATA_SOURCE_CHANGED" then
         ns.CaptureRecipes(profile, now())
@@ -565,6 +627,9 @@ for _, name in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SK
     pcall(frame.RegisterEvent, frame, name)
 end
 for _, name in ipairs({ "TRAIT_CONFIG_UPDATED", "PLAYER_TALENT_UPDATE", "ACTIVE_TALENT_GROUP_CHANGED" }) do
+    pcall(frame.RegisterEvent, frame, name)
+end
+for _, name in ipairs({ "PLAYER_EQUIPMENT_CHANGED", "TRANSMOG_DISPLAYED_OUTFIT_CHANGED", "PLAYER_ENTERING_WORLD" }) do
     pcall(frame.RegisterEvent, frame, name)
 end
 -- Forever blocks combat-log event registration. pcall cannot prevent the
