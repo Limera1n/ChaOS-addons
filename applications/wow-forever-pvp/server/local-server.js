@@ -27,6 +27,8 @@ export function createLocalServer({
       ["/map-outlines.js", ["map-outlines.js", "text/javascript; charset=utf-8"]],
       ["/armory.js", ["armory.js", "text/javascript; charset=utf-8"]],
       ["/item-tooltips.js", ["item-tooltips.js", "text/javascript; charset=utf-8"]],
+      ...["human", "orc", "dwarf", "nightelf", "scourge", "tauren", "skyborne"]
+        .map((scene) => [`/scenes/${scene}.webp`, [`scenes/${scene}.webp`, "image/webp"]]),
     ].map(([path, [file, type]]) => [
       path,
       {

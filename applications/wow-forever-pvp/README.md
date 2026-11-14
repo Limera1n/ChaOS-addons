@@ -27,7 +27,11 @@ convertit les coordonnées selon leur position et leur échelle.
 ### Portrait 3D
 
 La fiche joueur place le modèle 3D entre les emplacements d’équipement.
-Le décor de la fiche suit la zone de départ de la race. Le moteur WoWBocho
+Le décor de la fiche suit la zone de départ de la race. Les décors sont inclus
+dans l’application pour rester disponibles lorsque le site source change de version.
+Les enchantements qui possèdent un effet visuel affichent leur halo sur le modèle 3D.
+Les modèles d’effets absents du paquet Forever sont chargés depuis le paquet commun
+WoWBocho, avec leurs textures et particules. Le moteur WoWBocho
 affiche la race, la silhouette, les choix du barbier et l’équipement du
 dernier relevé. Le modèle SD est sélectionné par défaut lorsqu’il est disponible.
 Le sélecteur HD/SD se trouve en haut de l’aperçu et conserve

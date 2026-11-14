@@ -2,6 +2,21 @@ const ENGINE_ROOT = "https://wowbocho.com/tools/own-viewer/";
 const ASSET_PATH = "/api/wow-forever-pvp/armory/assets/";
 const METADATA_PATH = "/api/wow-forever-pvp/armory/metadata";
 
+// Forever omits some shared enchant models (for example Crusader and Fiery).
+// Only those visual models may use the common pack; character and gear IDs
+// must keep their Forever definitions. The chosen pack also owns the textures
+// and particles loaded by openModel.
+export function installEnchantModels(engine, visuals, foreverBase, commonBase) {
+  const models = new Set(Object.values(visuals).flat().filter(Boolean));
+  const openModel = engine.openModel;
+  engine.openModel = async (context, base, modelId, options) => {
+    if (base === foreverBase && models.has(modelId) && !await engine.pack(base).M(modelId)) {
+      base = commonBase;
+    }
+    return openModel.call(engine, context, base, modelId, options);
+  };
+}
+
 export function selectAppearance(choices, recipe, variants = []) {
   const supported = new Map(recipe.options.map((option) => [option.id, new Set(option.choices.map((choice) => choice.id))]));
   const selected = new Map();
@@ -59,6 +74,10 @@ async function loadEngine() {
     return [url, await response.text()];
   })));
   for (const file of ["loader", "wbm", "particles", "dress", "human", "zam"]) await loadScript(file);
+  const response = await fetch(ENGINE_ROOT + "visuals.json");
+  if (!response.ok) throw new Error("Le catalogue des effets d’enchantement est inaccessible.");
+  const visuals = await response.json();
+  installEnchantModels(window.OWNMV, visuals.d, window.OWN_FV_BASE, window.OWN_BASE);
 }
 
 async function startViewer() {

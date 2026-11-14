@@ -29,7 +29,7 @@ async function readBounded(response, maxBytes) {
 
 export async function serveArmoryAsset(request, response) {
   const path = new URL(request.url, "http://localhost").pathname.slice(ARMORY_ASSET_PATH.length);
-  const match = /^(wowbocho-own(?:fi|i|f[2-8]?))\/((?:[a-z0-9_-]+\/)*[a-z0-9_-]+(?:\.[a-z0-9]+)?)$/u.exec(path);
+  const match = /^(wowbocho-own(?:fi|i|f[2-8]?|[2-9]|[12]\d|3[0-8])?)\/((?:[a-z0-9_-]+\/)*[a-z0-9_-]+(?:\.[a-z0-9]+)?)$/u.exec(path);
   if (!match || !/\.(?:json|wbm|wba|webp|avif|png|ktx2|bin)$/u.test(match[2])) {
     response.writeHead(400).end();
     return;

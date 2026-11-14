@@ -1,5 +1,5 @@
 export const ARMORY_VIEW_PATH = "/api/wow-forever-pvp/armory";
-export const ARMORY_SCENE_URL = "https://mattjcr.github.io/wowforeverultimatecalculator/models/1.60.1.70790/scene/";
+export const ARMORY_SCENE_URL = new URL("./scenes/", import.meta.url).href;
 
 // WoW inventory slot IDs in the dressing room's a–s order.
 const slots = [1, 2, 3, 15, 5, 4, 19, 9, 10, 6, 7, 8, 11, 12, 13, 14, 16, 17, 18];
@@ -90,7 +90,7 @@ export function mountArmory(panel, character, snapshot) {
     body.closest("label").hidden = true;
   }
   function showScene() {
-    const scene = startingScenes.get(raceId ?? Number(race.value));
+    const scene = startingScenes.get(Number(race.value));
     if (scene) backdrop.src = `${ARMORY_SCENE_URL}${scene.file}.webp`;
     else backdrop.removeAttribute("src");
     backdrop.hidden = !scene;

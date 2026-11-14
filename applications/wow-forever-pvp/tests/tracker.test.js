@@ -10,7 +10,7 @@ import { createLocalServer } from "../server/local-server.js";
 import { API_PATH, IMPORT_TYPE } from "../server/routes.js";
 import { filterDeaths, groupZones, honorProgress, itemQuality, summarize } from "../client/model.js";
 import { ARMORY_VIEW_PATH, armoryParams, armoryRace } from "../client/armory.js";
-import { selectAppearance } from "../client/armory-viewer.js";
+import { installEnchantModels, selectAppearance } from "../client/armory-viewer.js";
 import { ARMORY_ASSET_PATH, serveArmoryAsset, serveArmoryMetadata } from "../server/armory.js";
 import { AZEROTH, mapContains, projectPosition } from "../client/map-regions.js";
 
@@ -68,6 +68,30 @@ test("barber choices translate between HD and SD, including captures made in SD"
   assert.deepEqual(selectAppearance([{ optionId: 999, choiceId: 1 }], sd, mapping), { options: [], unmatched: 1 });
 });
 
+test("missing enchant models use the common pack with its textures and particles, preserving Forever gear", async () => {
+  const calls = [];
+  const context = {};
+  const options = { allGeosets: true };
+  const engine = {
+    pack(base) {
+      assert.equal(base, "forever/");
+      return { M: async (id) => id === 166011 ? { m: "existing-fiery" } : undefined };
+    },
+    async openModel(...args) { assert.equal(this, engine); calls.push(args); return "model"; },
+  };
+  installEnchantModels(engine, { 103: [166032, 166032, 0], 25: [166011] }, "forever/", "common/");
+  assert.equal(await engine.openModel(context, "forever/", 166032, options), "model");
+  await engine.openModel(context, "forever/", 166011, options);
+  await engine.openModel(context, "forever/", 123, options);
+  await engine.openModel(context, "common/", 166032, options);
+  assert.deepEqual(calls, [
+    [context, "common/", 166032, options],
+    [context, "forever/", 166011, options],
+    [context, "forever/", 123, options],
+    [context, "common/", 166032, options],
+  ]);
+});
+
 test("armory uses transmog visuals, hides invisible slots and keeps weapon enchants", (t) => {
   const input = batch();
   input.snapshots[1].equipment = [
@@ -122,6 +146,10 @@ test("viewer resource relays restrict sources, share requests and recover from f
   assert.equal((await call(serveArmoryAsset, path)).headers["Content-Type"], "image/avif");
   assert.equal(calls, 3);
   assert.equal(fetched.at(-1), "https://wowbocho-ownf.pages.dev/own/t/test.avif");
+  assert.equal((await call(serveArmoryAsset, ARMORY_ASSET_PATH + "wowbocho-own35/own/m/glow.wbm")).status, 200);
+  assert.equal(fetched.at(-1), "https://wowbocho-own35.pages.dev/own/m/glow.wbm");
+  for (const host of ["wowbocho-own0", "wowbocho-own39", "wowbocho-own35.attacker", "attacker"])
+    assert.equal((await call(serveArmoryAsset, ARMORY_ASSET_PATH + host + "/own/m/glow.wbm")).status, 400);
 });
 
 test("equipment metadata survives import and legacy links still supply quality", () => {
@@ -383,6 +411,14 @@ test("local HTTP transport rejects foreign hosts/origins and oversized requests"
   );
   const url = `http://127.0.0.1:${server.address().port}`;
   assert.equal((await fetch(url)).status, 200);
+  for (const scene of ["human", "orc", "dwarf", "nightelf", "scourge", "tauren", "skyborne"]) {
+    const backdrop = await fetch(`${url}/scenes/${scene}.webp`);
+    assert.equal(backdrop.status, 200);
+    assert.equal(backdrop.headers.get("content-type"), "image/webp");
+    const bytes = Buffer.from(await backdrop.arrayBuffer());
+    assert.equal(bytes.toString("ascii", 0, 4), "RIFF");
+    assert.equal(bytes.toString("ascii", 8, 12), "WEBP");
+  }
   const armory = await fetch(url + ARMORY_VIEW_PATH + "?r=95&a=1&g=a12640.q19019");
   assert.equal((await fetch(url + API_PATH + "/item-tooltip?shard=256")).status, 400);
   assert.equal(armory.status, 200);
