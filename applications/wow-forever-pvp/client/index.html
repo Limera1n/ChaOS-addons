@@ -91,15 +91,6 @@
             </select></label
           >
         </div>
-        <section class="combat-intelligence" aria-labelledby="encounters-title">
-          <div class="section-title"><div><p class="eyebrow">LECTURE COLLECTIVE</p><h3 id="encounters-title">Groupes probables</h3></div><span id="encounters-count"></span></div>
-          <div id="encounters"></div>
-          <details class="inference-help"><summary>Comment sont-ils repérés ?</summary><p>Les VH ou coups fatals proches de deux membres d’une même guilde constituent un indice de jeu commun. Les rapprochements successifs sont réunis en une session lorsque deux participants au moins restent communs et que l’écart entre deux indices ne dépasse pas 30 minutes. Une session peut durer plusieurs heures et traverser plusieurs zones. La durée affichée va du premier au dernier indice observé ; elle ne prouve pas une présence continue ni une appartenance au groupe en jeu. Les filtres de jour et de carte limitent les observations et les VH affichées.</p></details>
-        </section>
-        <section class="daily-activity" aria-labelledby="daily-title">
-          <div class="section-title"><div><p class="eyebrow">MONDE OUVERT</p><h3 id="daily-title">Jour après jour</h3></div><span>Choisir un jour filtre aussi la carte</span></div>
-          <div id="daily-rows"></div>
-        </section>
         <div class="terrain">
           <section>
             <h3>Positions collectées</h3>
@@ -111,6 +102,8 @@
               <div class="map-actions">
                 <button id="map-clear-session" type="button" hidden>Masquer la session</button>
                 <button id="map-zoom-out" type="button" disabled>− Dézoomer</button>
+                <button id="map-zoom-in" type="button">+ Zoomer</button>
+                <button id="map-reset" type="button">Azeroth</button>
               </div>
             </div>
             <div class="map-frame">
@@ -120,6 +113,7 @@
                 viewBox="0 0 150 100"
                 preserveAspectRatio="none"
                 role="group"
+                tabindex="0"
                 aria-label="Positions sur la carte sélectionnée"
               ></svg>
               <span id="map-target" aria-hidden="true" hidden></span>
@@ -127,7 +121,7 @@
             <p id="map-note" class="muted" role="status"></p>
             <p class="map-caption muted">
               <span><b class="map-honor-key">●</b> VH observées · <b class="map-honor-key">◆</b> coups fatals · <b class="map-death-key">×</b> morts<span id="map-session-key" hidden> · <b class="map-group-key">○</b> session sélectionnée</span></span>
-              <span>© Blizzard · <a href="https://warcraftforever.games/maps" target="_blank" rel="noopener noreferrer">Fonds Warcraft Forever</a> · <a href="https://zephras.com/forever/enUS/map/" target="_blank" rel="noopener noreferrer">Contours Zephras</a></span>
+              <span>© Blizzard · <a href="https://github.com/openmap-world/openmap" target="_blank" rel="noopener noreferrer">Fond OpenMap</a> · <a href="maps/openmap/NOTICE.md" target="_blank" rel="noopener noreferrer">Crédits des textures</a></span>
             </p>
           </section>
           <section>
@@ -135,6 +129,15 @@
             <div id="zones"></div>
           </section>
         </div>
+        <section class="combat-intelligence" aria-labelledby="encounters-title">
+          <div class="section-title"><div><p class="eyebrow">LECTURE COLLECTIVE</p><h3 id="encounters-title">Groupes probables</h3></div><span id="encounters-count"></span></div>
+          <div id="encounters"></div>
+          <details class="inference-help"><summary>Comment sont-ils repérés ?</summary><p>Les VH ou coups fatals proches de deux membres d’une même guilde constituent un indice de jeu commun. Les rapprochements successifs sont réunis en une session lorsque deux participants au moins restent communs et que l’écart entre deux indices ne dépasse pas 30 minutes. Une session peut durer plusieurs heures et traverser plusieurs zones. La durée affichée va du premier au dernier indice observé ; elle ne prouve pas une présence continue ni une appartenance au groupe en jeu. Les filtres de jour et de carte limitent les observations et les VH affichées.</p></details>
+        </section>
+        <section class="daily-activity" aria-labelledby="daily-title">
+          <div class="section-title"><div><p class="eyebrow">MONDE OUVERT</p><h3 id="daily-title">Jour après jour</h3></div><span>Choisir un jour filtre aussi la carte</span></div>
+          <div id="daily-rows"></div>
+        </section>
         <h3>Journal du monde ouvert</h3>
         <p class="muted">
           Événements observés pendant la collecte uniquement. Les périodes hors

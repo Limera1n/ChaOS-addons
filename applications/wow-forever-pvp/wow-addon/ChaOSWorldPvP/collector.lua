@@ -463,6 +463,7 @@ local function showExport()
     ns.CaptureRecipes(profile, now())
     local payload = {
         professions = ns.CollectProfessions(profile, now()),
+        talents = ns.CaptureTalents(profile, now()),
         format = "chaos-world-pvp", version = 1, sourceId = db.sourceId,
         addonVersion = ns.version, build = read(function()
             local version, build = GetBuildInfo()
@@ -500,7 +501,9 @@ frame:SetScript("OnEvent", function(_, name, ...)
     if name == "PLAYER_LOGIN" then initialize(); return end
     if not profile or not db then return end
     local success = ...
-    if name == "TRADE_SKILL_SHOW" or name == "TRADE_SKILL_LIST_UPDATE" or name == "TRADE_SKILL_DATA_SOURCE_CHANGED" then
+    if name == "TRAIT_CONFIG_UPDATED" or name == "PLAYER_TALENT_UPDATE" or name == "ACTIVE_TALENT_GROUP_CHANGED" then
+        ns.CaptureTalents(profile, now())
+    elseif name == "TRADE_SKILL_SHOW" or name == "TRADE_SKILL_LIST_UPDATE" or name == "TRADE_SKILL_DATA_SOURCE_CHANGED" then
         ns.CaptureRecipes(profile, now())
     elseif name == "SKILL_LINES_CHANGED" then
         ns.CollectProfessions(profile, now())
@@ -559,6 +562,9 @@ frame:RegisterEvent("PARTY_KILL")
 frame:RegisterEvent("TIME_PLAYED_MSG")
 frame:RegisterEvent("PLAYER_GUILD_UPDATE")
 for _, name in ipairs({ "TRADE_SKILL_SHOW", "TRADE_SKILL_LIST_UPDATE", "TRADE_SKILL_DATA_SOURCE_CHANGED", "SKILL_LINES_CHANGED" }) do
+    pcall(frame.RegisterEvent, frame, name)
+end
+for _, name in ipairs({ "TRAIT_CONFIG_UPDATED", "PLAYER_TALENT_UPDATE", "ACTIVE_TALENT_GROUP_CHANGED" }) do
     pcall(frame.RegisterEvent, frame, name)
 end
 -- Forever blocks combat-log event registration. pcall cannot prevent the

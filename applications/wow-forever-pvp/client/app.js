@@ -2,14 +2,16 @@ import { filterDeaths, formatPlayed, groupZones, guildKey, honorProgress, itemQu
 import { itemEnchantLabel, mountArmory, mountAvatar } from "./armory.js";
 import { statGroups, formatStat } from "./character-stats.js";
 import { professionsPanel, bindProfessionSearch } from "./professions.js";
+import { talentsPanel, bindTalents } from "./talents.js";
 import { AZEROTH, mapContains, mapRegions, projectPosition } from "./map-regions.js";
-import { mapOutlines } from "./map-outlines.js";
+import { createMapView } from "./map-view.js";
 import { bindEquipmentTooltips, hideEquipmentTooltip } from "./item-tooltips.js";
 import { installDesktopCursor } from "./desktop-cursor.js";
 import { canonicalLinkKey, scopeLabel } from "./identity.js";
 import { activityCharacter, dailyActivity, dayBounds, dayKey, filterDay, formatSessionDuration, guildEvents, probableGroups, selectGroupSessions, sortActivity } from "./activity.js";
 
 installDesktopCursor();
+const mapView = createMapView(document.querySelector("#map"));
 
 // Same paths as server/routes.js; the client cannot import server code.
 const API_PATH = "/api/wow-forever-pvp";
@@ -134,6 +136,7 @@ function setProfileView(view) {
   }
   $("#armory-character").hidden = view !== "character";
   $("#armory-professions").hidden = view !== "professions";
+  $("#armory-talents").hidden = view !== "talents";
   $("#armory-pvp").hidden = view !== "pvp";
   $("#activity").hidden = view !== "pvp";
   if (view === "character") mountCurrentArmory?.();
@@ -387,9 +390,11 @@ function render() {
     <nav class="armory-tabs" aria-label="Vues de la fiche">
       <button type="button" data-profile-view="pvp" aria-controls="armory-pvp activity">Joueur contre joueur</button>
       <button type="button" data-profile-view="character" aria-controls="armory-character">Personnage</button>
+      <button type="button" data-profile-view="talents" aria-controls="armory-talents">Talents</button>
       <button type="button" data-profile-view="professions" aria-controls="armory-professions">Métiers</button>
     </nav>
     ${armoryEquipment(latest, character)}
+    ${talentsPanel(character.talents)}
     ${professionsPanel(character.professions)}
     <div id="armory-pvp" hidden>
     <section aria-labelledby="honor-points-title">
@@ -420,6 +425,7 @@ function render() {
   };
   bindEquipmentTooltips($("#profile"), latest?.equipment ?? []);
   bindProfessionSearch($("#profile"));
+  bindTalents($("#profile"));
   for (const button of $(".armory").querySelectorAll("[data-profile-view]")) {
     button.addEventListener("click", () => setProfileView(button.dataset.profileView));
   }
@@ -528,72 +534,37 @@ function zoomTo(mapId) {
   selectMap(mapId);
   $(mapId === AZEROTH ? "#map-filter" : "#map-zoom-out").focus({ preventScroll: true });
 }
-function bindMapTarget(element, id) {
-  const name = mapNames.get(id);
-  element.setAttribute("role", "button");
-  element.setAttribute("tabindex", "0");
-  element.setAttribute("aria-label", `Zoomer sur ${name}`);
-  const label = $("#map-target");
-  const updateLabel = () => {
-    const active = element.matches(":hover, :focus-visible");
-    label.hidden = !active;
-    if (active) label.textContent = name;
-  };
-  for (const event of ["pointerenter", "pointerleave", "focus", "blur"])
-    element.addEventListener(event, updateLabel);
-  element.addEventListener("click", () => zoomTo(id));
-  element.addEventListener("keydown", (event) => {
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    zoomTo(id);
-  });
-}
 function renderMap(events) {
-  const map = $("#map");
-  map.replaceChildren();
+  const seamless = mapView.prepare(selectedMap, `${MAP_ART}${selectedMap}.webp`);
+  const map = mapView.content;
   $("#map-target").hidden = true;
   const note = $("#map-note");
   const art = $("#map-art");
   const mapId = selectedMap;
   const name = mapNames.get(mapId);
   $("#map-current").textContent = name;
-  $("#map-zoom-out").disabled = mapId === AZEROTH;
   $("#map-clear-session").hidden = !focusedSession;
   $("#map-session-key").hidden = !focusedSession;
-  map.setAttribute("aria-label", `Carte de ${name}`);
+  $("#map").setAttribute("aria-label", `Carte de ${name}. Molette ou touches + et − pour zoomer, glisser ou flèches pour déplacer.`);
   if (!/^\d+$/u.test(mapId)) {
     art.replaceChildren();
     note.textContent = "Aucune carte relevée pour cette sélection.";
     return;
   }
-  const children = [...mapOutlines].filter(([id]) => mapRegions.get(id).parent === mapId);
   const positioned = events.filter((event) => event.location?.x != null);
   const points = positioned.flatMap((item) => {
     const position = projectPosition(item.location, mapId);
     return position ? [{ item, ...position }] : [];
   });
   const description = [
-    children.length ? "Survolez une zone pour voir son nom. Cliquez pour zoomer." : "",
+    "Molette ou pincement pour zoomer · glisser pour déplacer · double-clic pour se rapprocher · + / − et flèches au clavier.",
+    !seamless ? "Cette zone possède une carte séparée d’Azeroth." : "",
     positioned.length > points.length ? "Certaines positions sont visibles uniquement sur leur carte de zone." : "",
     !positioned.length ? "Aucune coordonnée relevée sur cette carte." : "",
   ].filter(Boolean).join(" ");
   note.textContent = description;
-  const image = document.createElement("img");
-  image.alt = "";
-  image.referrerPolicy = "no-referrer";
-  image.addEventListener("error", () => {
-    if (art.firstElementChild !== image) return;
-    image.remove();
-    note.textContent = `Fond de carte indisponible. ${description}`.trim();
-  }, { once: true });
-  art.replaceChildren(image);
-  image.src = `${MAP_ART}${mapId}.webp`;
+  art.replaceChildren();
 
-  for (const [id, path] of children) {
-    const outline = svgElement("path", { class: "map-region", d: path });
-    bindMapTarget(outline, id);
-    map.append(outline);
-  }
   const occupied = new Set();
   for (const encounter of focusedSession?.encounters ?? []) {
     const position = projectPosition({ mapId: encounter.mapId, x: encounter.x, y: encounter.y }, mapId);
@@ -605,6 +576,9 @@ function renderMap(events) {
     if (occupied.has(cell)) continue;
     occupied.add(cell);
     const ring = svgElement("circle", { class: "map-group", cx: x, cy: y, r: 1.25 });
+    ring.setAttribute("cx", "0");
+    ring.setAttribute("cy", "0");
+    ring.dataset.mapMarker = `translate(${x} ${y})`;
     const title = svgElement("title", {});
     title.textContent = `Session probable · ${encounter.members.map((member) => member.name).join(", ")} · ${date(encounter.start)}`;
     ring.append(title);
@@ -615,6 +589,7 @@ function renderMap(events) {
   for (const { item, x, y } of ordered) {
     const sourceMap = String(item.location.mapId);
     const marker = svgElement("g", { transform: `translate(${x * 150} ${y * 100})` });
+    marker.dataset.mapMarker = `translate(${x * 150} ${y * 100})`;
     marker.append(svgElement("circle", { class: "map-marker-target", r: 2 }));
     marker.append(item.type === "death"
       ? svgElement("path", { class: "map-death", d: "M-1.25,-1.25l2.5,2.5m0,-2.5l-2.5,2.5" })
@@ -625,13 +600,13 @@ function renderMap(events) {
     const { x: localX, y: localY, at } = item.location;
     title.textContent = `${eventLabel(item)} · ${mapNames.get(sourceMap)} · ${date(item.at)} · ${(localX * 100).toFixed(1)}, ${(localY * 100).toFixed(1)} · position ${item.at - at}s avant l’événement`;
     marker.append(title);
-    if (sourceMap !== mapId) {
-      marker.classList.add("map-marker-link");
-      marker.addEventListener("click", () => zoomTo(sourceMap));
-    }
     map.append(marker);
   }
+  mapView.update();
 }
+$("#map").addEventListener("map-art-error", () => {
+  $("#map-note").textContent = "Certaines textures de la carte sont indisponibles. Les positions restent consultables.";
+});
 const openImport = () => {
   $("#import-error").textContent = "";
   $("#import-dialog").showModal();
@@ -704,8 +679,10 @@ $("#map-filter").addEventListener("change", () => {
   selectMap($("#map-filter").value);
 });
 $("#map-zoom-out").addEventListener("click", () => {
-  zoomTo(mapRegions.get(selectedMap)?.parent ?? AZEROTH);
+  mapView.zoom(1.5);
 });
+$("#map-zoom-in").addEventListener("click", () => mapView.zoom(1 / 1.5));
+$("#map-reset").addEventListener("click", () => { zoomTo(AZEROTH); mapView.reset(); });
 $("#zones").addEventListener("click", (event) => {
   const button = event.target.closest("[data-map]");
   if (button) selectMap(button.dataset.map);

@@ -88,6 +88,8 @@ function migrateCharacters(characters) {
     if (appearance) result.appearance = appearance;
     const professions = [previous.professions, candidate.professions].filter(Boolean).sort((a, b) => b.at - a.at)[0];
     if (professions) result.professions = professions;
+    const talents = [previous.talents, candidate.talents].filter(Boolean).sort((a, b) => b.at - a.at)[0];
+    if (talents) result.talents = talents;
     for (const kind of ["snapshots", "events"]) {
       const observations = new Map(previous[kind].map((item) => [item.sourceKey, item]));
       for (const item of candidate[kind]) {
@@ -147,6 +149,9 @@ export function createTrackerStore({ dataDir, now = Date.now }) {
     }
     if (batch.professions && (!character.professions || batch.professions.at > character.professions.at)) {
       character.professions = batch.professions;
+    }
+    if (batch.talents && (!character.talents || batch.talents.at > character.talents.at)) {
+      character.talents = batch.talents;
     }
     let added = 0;
     for (const kind of ["snapshots", "events"]) {

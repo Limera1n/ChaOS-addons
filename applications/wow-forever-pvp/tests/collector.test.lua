@@ -83,6 +83,7 @@ SlashCmdList = {}
 
 dofile("wow-addon/ChaOSWorldPvP/json.lua")
 dofile("wow-addon/ChaOSWorldPvP/professions.lua")
+dofile("wow-addon/ChaOSWorldPvP/talents.lua")
 dofile("wow-addon/ChaOSWorldPvP/collector.lua")
 local collector = frames[1]
 local function fire(name, ...) collector.scripts.OnEvent(collector, name, ...) end

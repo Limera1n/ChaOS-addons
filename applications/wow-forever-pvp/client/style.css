@@ -867,11 +867,8 @@ select {
 .map-frame {
   position: relative;
   aspect-ratio: 3 / 2;
-  background-color: #1a2117;
-  background-image:
-    linear-gradient(#34402c66 1px, transparent 1px),
-    linear-gradient(90deg, #34402c66 1px, transparent 1px);
-  background-size: 10% 10%;
+  background-color: #b39760;
+  overflow: hidden;
   border: 1px solid var(--line);
 }
 #map-art,
@@ -886,41 +883,27 @@ select {
   width: 100%;
   height: 100%;
 }
-.map-region {
-  fill: transparent;
-  fill-rule: evenodd;
-  stroke: transparent;
-  vector-effect: non-scaling-stroke;
-  pointer-events: fill;
-  cursor: zoom-in;
-}
-.map-region:hover,
-.map-region:focus-visible {
-  fill: #ffe6a24d;
-  stroke: #ffdf8d;
-  stroke-width: 1.25px;
-  outline: none;
-}
+#map { cursor: grab; touch-action: none; user-select: none; }
+#map.is-dragging, #map.is-dragging * { cursor: grabbing; }
+#map:focus-visible { outline: 2px solid var(--accent); outline-offset: -3px; }
+#map-zoom-in:disabled { cursor: default; opacity: .5; }
 #map-target {
   position: absolute;
-  top: 10px;
-  inset-inline: 0;
+  bottom: 12px;
+  left: 12px;
   width: max-content;
-  max-width: calc(100% - 20px);
-  margin-inline: auto;
-  padding: 5px 12px;
-  border: 1px solid #c29958;
-  background: #15150ef2;
-  color: #ffe7ab;
-  font: 16px Georgia, serif;
-  text-align: center;
+  max-width: calc(100% - 24px);
+  padding: 7px 11px;
+  border-radius: 3px;
+  background: #211a12dc;
+  box-shadow: 0 2px 8px #1b140c33;
+  color: #f5e7c9;
+  font: 13px/1.4 Georgia, serif;
+  letter-spacing: .015em;
   pointer-events: none;
 }
 .map-marker-target {
   fill: transparent;
-}
-.map-marker-link {
-  cursor: zoom-in;
 }
 #map-note:empty {
   display: none;
@@ -1071,6 +1054,28 @@ code {
   }
 }
 .profession-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.talent-heading { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; }
+.talent-heading h4 { margin: 0; font: 1.1rem Georgia, serif; color: var(--accent); }
+.talent-total { color: var(--accent); font: 1.25rem Georgia, serif; }
+.talent-tree { margin: 1.2rem 0; padding: 1rem; border: 1px solid var(--line); border-radius: 6px; background: radial-gradient(ellipse at top, #332b1c, #111310 75%); }
+.talent-scroll { overflow: auto; max-height: 72vh; margin-top: .8rem; border: 1px solid var(--line); background: #0d100ecc; }
+.talent-canvas { display: block; margin: auto; }
+.talent-edge { stroke: #454941; stroke-width: 3; }
+.talent-edge-active { stroke: #a18b4a; }
+.talent-node { outline: none; }
+.talent-frame { fill: #1d211c; stroke: #64675e; stroke-width: 3; }
+.talent-node image { opacity: .4; }
+.talent-learned .talent-frame { stroke: #8ca96d; }
+.talent-learned image { opacity: 1; }
+.talent-maxed .talent-frame { stroke: #e6bc60; }
+.talent-node:focus .talent-frame, .talent-node:hover .talent-frame { stroke: white; stroke-width: 4; }
+.talent-rank-bg { fill: #121510; stroke: #64675e; }
+.talent-rank { fill: #eee7d3; font: bold 13px Calibri, sans-serif; }
+.talent-maxed .talent-rank { fill: #ffe2a0; }
+.talent-fallback { fill: #b4a37b; font-size: 24px; }
+.talent-selected-list { margin-top: .8rem; }
+.talent-selected-list summary { color: var(--accent); cursor: pointer; }
+.talent-selected-list li { margin: .5rem 0; }
 .profession-heading h4 { margin: 0; color: #e6c891; font-size: 1.1rem; }
 .profession-heading label { display: grid; gap: .4rem; font-size: .85rem; }
 .profession-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 340px), 1fr)); gap: 1rem; margin-top: 1.2rem; }

@@ -93,6 +93,46 @@ function snapshotEquipment(item, sets) {
   return sets[index];
 }
 
+function talents(value, exportedAt) {
+  record(value);
+  const at = integer(value.at);
+  const positiveId = (id) => { const result = integer(id, 1000000000); if (!result) fail(); return result; };
+  const unique = (values) => { if (new Set(values).size !== values.length) fail(); };
+  const coordinate = (n) => { if (typeof n !== "number" || !Number.isFinite(n) || Math.abs(n) > 1000000) fail(); return n; };
+  if (at > exportedAt) fail();
+  const trees = list(value.trees, 8).map((tree) => {
+    record(tree);
+    const nodes = list(tree.nodes, 1000).map((node) => {
+      record(node);
+      const entries = list(node.entries, 16).map((entry) => {
+        record(entry);
+        return { id: positiveId(entry.id), name: string(entry.name),
+          ...(entry.spellId == null ? {} : { spellId: positiveId(entry.spellId) }),
+          ...(entry.icon == null ? {} : { icon: integer(entry.icon, 1000000000) }) };
+      });
+      if (!entries.length) fail();
+      unique(entries.map((entry) => entry.id));
+      const result = { id: positiveId(node.id), x: coordinate(node.x), y: coordinate(node.y),
+        rank: integer(node.rank, 100), maxRank: integer(node.maxRank, 100), spent: integer(node.spent, 100),
+        entries, edges: list(node.edges, 32).map(positiveId),
+        ...(node.activeEntryId == null ? {} : { activeEntryId: positiveId(node.activeEntryId) }) };
+      unique(result.edges);
+      if (result.rank > result.maxRank || result.spent > result.rank || result.edges.includes(result.id)) fail();
+      if (result.activeEntryId != null && !entries.some((entry) => entry.id === result.activeEntryId)) fail();
+      if (result.rank > 0 && result.activeEntryId == null) fail();
+      return result;
+    });
+    if (!nodes.length) fail();
+    unique(nodes.map((node) => node.id));
+    const ids = new Set(nodes.map((node) => node.id));
+    if (nodes.some((node) => node.edges.some((id) => !ids.has(id)))) fail();
+    return { id: positiveId(tree.id), ...(tree.name == null ? {} : { name: string(tree.name) }), nodes };
+  });
+  if (!trees.length) fail();
+  unique(trees.map((tree) => tree.id));
+  return { at, configId: positiveId(value.configId), ...(value.name == null ? {} : { name: string(value.name) }), trees };
+}
+
 function professions(value, exportedAt) {
   record(value);
   const at = integer(value.at);
@@ -164,6 +204,7 @@ export function validateImport(input) {
   };
   result.character.ruleset = identityRuleset(result.character);
   if (input.professions != null) result.professions = professions(input.professions, result.exportedAt);
+  if (input.talents != null) result.talents = talents(input.talents, result.exportedAt);
   result.character.name = playerName(result.character);
   if (character.appearance != null)
     result.character.appearance = characterAppearance(character.appearance, result.character, result.exportedAt);

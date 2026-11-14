@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { createTrackerStore } from "./store.js";
 import { MAX_IMPORT_BYTES } from "./import-schema.js";
@@ -23,10 +23,16 @@ export function createLocalServer({
       ["/model.js", ["model.js", "text/javascript; charset=utf-8"]],
       ["/character-stats.js", ["character-stats.js", "text/javascript; charset=utf-8"]],
       ["/professions.js", ["professions.js", "text/javascript; charset=utf-8"]],
+      ["/talents.js", ["talents.js", "text/javascript; charset=utf-8"]],
       ["/identity.js", ["identity.js", "text/javascript; charset=utf-8"]],
       ["/activity.js", ["activity.js", "text/javascript; charset=utf-8"]],
       ["/map-regions.js", ["map-regions.js", "text/javascript; charset=utf-8"]],
       ["/map-outlines.js", ["map-outlines.js", "text/javascript; charset=utf-8"]],
+      ["/map-view.js", ["map-view.js", "text/javascript; charset=utf-8"]],
+      ...readdirSync(new URL("../client/maps/openmap/", import.meta.url))
+        .filter((file) => /\.(webp|json|md|txt)$/u.test(file))
+        .map((file) => [`/maps/openmap/${file}`, [`maps/openmap/${file}`,
+          file.endsWith(".webp") ? "image/webp" : file.endsWith(".json") ? "application/json" : "text/plain; charset=utf-8"]]),
       ["/armory.js", ["armory.js", "text/javascript; charset=utf-8"]],
       ["/avatar-cache.js", ["avatar-cache.js", "text/javascript; charset=utf-8"]],
       ["/item-tooltips.js", ["item-tooltips.js", "text/javascript; charset=utf-8"]],

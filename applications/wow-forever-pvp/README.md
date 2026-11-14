@@ -87,6 +87,33 @@ caractéristiques de base fournies par Zephras et indique leur provenance.
 
 ## Démarrer seule en local
 
+### Carte des positions
+
+La carte utilise les textures assemblées d’OpenMap : zoom continu vers le curseur
+avec la molette, déplacement par glisser, boutons + / − et retour à Azeroth.
+Au clavier, sélectionner la carte puis utiliser + / −, les flèches et Début.
+Le sélecteur de zone cadre la zone tout en conservant le fond des régions voisines.
+Les filtres de période, de personnage et de session restent appliqués aux marqueurs.
+Les VH, coups fatals et morts gardent une taille lisible pendant le zoom.
+Les zones sans position connue sur Azeroth conservent leur carte séparée.
+
+Un seul fond `client/maps/openmap/overview.webp` (6012 × 4008) contient les zones
+assemblées ; le jeu n’est pas nécessaire sur le serveur. Le zoom est progressif,
+centré sur le curseur, et accepte aussi le pincement tactile. Un double-clic
+rapproche la vue, Maj + double-clic l’éloigne. Le survol indique la zone et ses
+coordonnées sans colorer la carte ni modifier les filtres. La détection utilise
+les contours de toutes les zones, indépendamment du cadrage et de la sélection.
+Le zoom respecte la préférence système de réduction des animations.
+Pour régénérer le fond depuis
+l’addon installé, avec Python et Pillow :
+
+```powershell
+python scripts/import-openmap.py "E:/Games/Battle.net/World of Warcraft/_forever_/Interface/AddOns/OpenMap"
+```
+
+Les illustrations gardent leurs crédits Blizzard/OpenMap et Santiago Reyes,
+documentés dans `client/maps/openmap/NOTICE.md` et `SOURCE-NOTICE.md`.
+
 Avec Node.js 24 ou plus récent, depuis ce dossier :
 
 ```powershell
@@ -167,9 +194,36 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.15.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.16.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
+
+## Talents et build actif (collecteur 0.5.16)
+
+La fiche propose **Talents** entre **Personnage** et **Métiers**. Elle affiche
+l’arbre du build actif validé : talents appris ou non, rangs, liens, choix actifs
+et total des points investis. Les rangs accordés gratuitement sont distingués
+des points achetés dans le détail. Les lignes et colonnes suivent les positions
+du jeu ; les arbres larges défilent sur petit écran. Le survol, le clavier et
+le toucher permettent de consulter le nom et les rangs d’un talent.
+
+Mettre le site à jour, installer le collecteur **0.5.16**, ouvrir les talents
+en jeu et valider ou annuler les changements en attente. Lancer `/cvp export`
+puis importer le JSON sur le site. Seul le build actif est relevé, pas tous
+les builds sauvegardés ni les talents d’un autre personnage inspecté.
+
+La collecte utilise
+[C_ClassTalents.GetActiveConfigID](https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/ClassTalentsDocumentation.lua)
+et [C_Traits](https://github.com/Gethe/wow-ui-source/blob/forever/Interface/AddOns/Blizzard_APIDocumentationGenerated/SharedTraitsDocumentation.lua).
+Une configuration avec des changements non validés, une lecture protégée ou
+incomplète conserve le dernier relevé daté, sans inventer un arbre vide.
+Les anciens exports restent compatibles et ne remplacent pas un build plus
+récent. Le filtre Journée ne change pas ce dernier build connu.
+La collecte reste à confirmer dans le client Forever ; les scénarios Lua
+utilisent des API simulées.
+
+Tests spécifiques : `node --test tests/talents.test.js` et
+`lua tests/talents.test.lua`.
 
 ## Métiers (collecteur 0.5.15)
 
