@@ -1,4 +1,4 @@
-import { itemEnchant } from "./armory.js";
+import { itemEnchantLabel } from "./armory.js";
 
 const SHARDS = 256;
 const catalog = new Map();
@@ -105,8 +105,8 @@ async function showTooltip(row, item) {
   tooltip.replaceChildren();
   addLine(title, "tooltip-name");
   for (const line of lines) addLine(line);
-  const enchant = itemEnchant(item);
-  if (enchant) addLine({ text: `Enchantement #${enchant}`, effect: true });
+  const enchant = itemEnchantLabel(item);
+  if (enchant) addLine({ text: enchant, effect: true });
   addLine({ text: lines.length ? "Fiche de base · Zephras" : "Caractéristiques indisponibles" }, "tooltip-source");
   positionTooltip();
 }

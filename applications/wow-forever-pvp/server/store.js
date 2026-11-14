@@ -12,12 +12,21 @@ function fillEquipmentMetadata(equipment, otherEquipment) {
     const quality = item.quality ?? other?.quality;
     const tooltip = item.tooltip ?? other?.tooltip;
     const transmogItemId = item.transmogItemId ?? other?.transmogItemId;
+    const enchantId = item.enchantId ?? other?.enchantId;
+    const fullLink = other?.link?.match(/\|Hitem:(\d+):[^|]*\|h([^|]+)\|h/u);
+    // A fixed collector can restore hyperlink data lost during an older copy.
+    // Only enrich an identical label for the same actual item; two complete
+    // links that disagree must still be rejected as a changed observation.
+    const link = fullLink && Number(fullLink[1]) === item.itemId && item.link === fullLink[2]
+      ? other.link : item.link;
     return {
       ...item,
+      link,
       ...(icon == null ? {} : { icon }),
       ...(quality == null ? {} : { quality }),
       ...(tooltip == null ? {} : { tooltip }),
       ...(transmogItemId == null ? {} : { transmogItemId }),
+      ...(enchantId == null ? {} : { enchantId }),
     };
   });
 }

@@ -217,10 +217,13 @@ local function equipment()
     for slot = 1, 19 do
         local itemId = number(read(GetInventoryItemID, "player", slot))
         if itemId then
+            local link = text(read(GetInventoryItemLink, "player", slot))
+            local enchantId = link and tonumber(link:match("|Hitem:%d+:(%d+)"))
             local icon = number(read(GetInventoryItemTexture, "player", slot))
             local quality = number(read(C_Item and C_Item.GetItemQualityByID, itemId))
             items[#items + 1] = {
-                slot = slot, itemId = itemId, link = text(read(GetInventoryItemLink, "player", slot)),
+                slot = slot, itemId = itemId, link = link,
+                enchantId = enchantId,
                 transmogItemId = transmogItem(slot, itemId),
                 icon = icon and icon > 0 and icon or nil,
                 quality = quality and quality <= 8 and quality or nil,
@@ -276,6 +279,54 @@ local function captureAppearance(confirmed)
     barberSession.captured = true
     return true
 end
+local function characterStats()
+    local stats = {}
+    -- Read each return value through the secret-value guard, including signed bonuses.
+    local function value(fn, index, ...)
+        if type(fn) ~= "function" then return nil end
+        return read(function(...)
+            local result = read(function(...) return select(index, fn(...)) end, ...)
+            if type(result) == "number" and result == result and math.abs(result) <= 1000000000 then return result end
+        end, ...)
+    end
+    local function put(key, fn, index, ...)
+        stats[key] = value(fn, index, ...)
+    end
+    local function total(key, fn)
+        local base, positive, negative = value(fn, 1, "player"), value(fn, 2, "player"), value(fn, 3, "player")
+        if base and positive and negative then stats[key] = math.max(0, base + positive + negative) end
+    end
+    put("health", UnitHealthMax, 1, "player")
+    put("power", UnitPowerMax, 1, "player")
+    for index, key in ipairs({ "strength", "agility", "stamina", "intellect", "spirit" }) do put(key, UnitStat, 2, "player", index) end
+    for index, key in ipairs({ "mainMin", "mainMax", "offMin", "offMax" }) do put(key, UnitDamage, index, "player") end
+    put("attackSpeed", UnitAttackSpeed, 1, "player")
+    total("attackPower", UnitAttackPower)
+    total("rangedPower", UnitRangedAttackPower)
+    put("rangedMin", UnitRangedDamage, 2, "player")
+    put("rangedMax", UnitRangedDamage, 3, "player")
+    for _, entry in ipairs({ {"meleeHit", GetHitModifier, CR_HIT_MELEE}, {"rangedHit", GetRangedHitModifier, CR_HIT_RANGED}, {"spellHit", GetSpellHitModifier, CR_HIT_SPELL} }) do
+        local modifier = value(entry[2], 1)
+        local rating = entry[3] and value(GetCombatRatingBonus, 1, entry[3])
+        if modifier and rating then stats[entry[1]] = modifier + rating end
+    end
+    put("meleeCrit", GetCritChance, 1)
+    put("rangedCrit", GetRangedCritChance, 1)
+    put("spellCrit", GetSpellCritChance, 1)
+    put("spellHealing", GetSpellBonusHealing, 1)
+    put("armor", UnitArmor, 2, "player")
+    local defense, bonus = value(UnitDefenseSkill, 1, "player"), value(UnitDefenseSkill, 2, "player")
+    if defense and bonus then stats.defense = math.max(0, defense + bonus) end
+    put("dodge", GetDodgeChance, 1)
+    put("parry", GetParryChance, 1)
+    put("block", GetBlockChance, 1)
+    put("blockValue", GetShieldBlock, 1)
+    for index, school in ipairs({ "holy", "fire", "nature", "frost", "shadow", "arcane" }) do
+        put(school .. "Damage", GetSpellBonusDamage, 1, index + 1)
+        put(school .. "Resistance", UnitResistance, 2, "player", index)
+    end
+    if next(stats) then return stats end
+end
 local function snapshot()
     local character = profile.character
     character.level = number(read(UnitLevel, "player"))
@@ -297,6 +348,7 @@ local function snapshot()
         playedSeconds = profile.played and profile.played.seconds,
         playedAt = profile.played and profile.played.at,
         honorPoints = honorPoints(),
+        stats = characterStats(),
         guild = guild, guildKnown = guildKnown or nil, equipment = equipment(),
     }, 300)
 end

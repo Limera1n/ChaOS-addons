@@ -1,4 +1,5 @@
 import { identityRuleset, playerKey, playerName } from "../client/identity.js";
+import { statKeys } from "../client/character-stats.js";
 
 export const MAX_IMPORT_BYTES = 2 * 1024 * 1024;
 const MAX_TIME = 4102444800;
@@ -92,6 +93,18 @@ function snapshotEquipment(item, sets) {
   return sets[index];
 }
 
+function characterStats(value) {
+  if (value == null) return {};
+  record(value);
+  const stats = {};
+  for (const key of statKeys) {
+    if (value[key] == null) continue;
+    if (typeof value[key] !== "number" || !Number.isFinite(value[key]) || Math.abs(value[key]) > 1000000000) fail();
+    stats[key] = value[key];
+  }
+  return { stats };
+}
+
 // Rebuild every object rather than persisting arbitrary keys from an untrusted export.
 export function validateImport(input) {
   record(input);
@@ -135,6 +148,7 @@ export function validateImport(input) {
   result.snapshots = list(input.snapshots, 300).map((item) => ({
     ...identity(item),
     ...playedTime(item),
+    ...characterStats(item.stats),
     lifetimeHK:
       item.lifetimeHK == null ? null : integer(item.lifetimeHK, 1000000000),
     ...(item.honorPoints == null ? {} : { honorPoints: integer(item.honorPoints, 100000000) }),
@@ -147,6 +161,7 @@ export function validateImport(input) {
       return {
         slot: slotId,
         itemId: integer(slot.itemId, 1000000000),
+        ...(slot.enchantId == null ? {} : { enchantId: integer(slot.enchantId, 999999999) }),
         ...(slot.transmogItemId == null ? {} : { transmogItemId: integer(slot.transmogItemId, 1000000000) }),
         link: optionalString(slot.link, 2048),
         ...(slot.icon == null ? {} : { icon: integer(slot.icon, 1000000000) }),

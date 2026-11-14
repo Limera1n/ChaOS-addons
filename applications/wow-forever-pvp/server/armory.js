@@ -111,9 +111,11 @@ export function serveArmory(request, response) {
   const body = searchParams.get("a");
   const gear = searchParams.get("g") ?? "";
   const mode = searchParams.get("m");
+  const portrait = searchParams.get("portrait");
+  const controls = searchParams.get("controls");
   const validRace = /^(?:[1-9]|95|96)$/u.test(race);
   const valid = validRace && appearanceCode.test(body ?? "") && (!gear || gearCode.test(gear));
-  if (!valid || (mode !== null && mode !== "sd" && mode !== "hd")) {
+  if (!valid || (mode !== null && mode !== "sd" && mode !== "hd") || (portrait !== null && portrait !== "1") || (controls !== null && controls !== "0")) {
     response.writeHead(400, { "Content-Type": "text/plain; charset=utf-8" });
     response.end("Paramètres du portrait 3D invalides.");
     return;
@@ -134,13 +136,17 @@ html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background:
 #stage, .model { position: absolute; inset: 0; width: 100%; height: 100% }
 #controls { position: absolute; top: 10px; right: 10px; z-index: 1; display: flex; align-items: center; gap: 8px; padding: 8px 10px; border: 1px solid #c49b48; border-radius: 6px; background: #181c16; color: #fff3dc; font-weight: 700; box-shadow: 0 2px 8px #0008 }
 select, button { color: #ffc54e; background: #16120c; border: 1px solid #bc914c; border-radius: 4px; padding: 4px }
+#retry { position: absolute; top: 65px; right: 10px; z-index: 2 }
 #definition { min-height: 32px; padding: 5px 10px; background: #ffcc55; color: #211707; border-color: #ffe6a6; font: 700 14px system-ui, sans-serif; color-scheme: light; cursor: pointer }
 #definition:focus-visible { outline: 2px solid #fff; outline-offset: 3px }
 #status { position: absolute; bottom: 18px; left: 12px; right: 12px; z-index: 1; margin: 0; text-align: center; text-shadow: 0 1px 3px #000 }
 #credit { position: absolute; bottom: 2px; right: 8px; font-size: 9px; color: #c1baa8; text-decoration: none }
+${controls === "0" ? "#controls { display: none } #retry { top: auto; bottom: 45px; right: 40% }" : ""}
+${portrait === "1" ? "#controls, #credit { display: none } #status { font-size: 9px; bottom: 3px; left: 2px; right: 2px } #stage img { width: 100%; height: 100%; object-fit: contain }" : ""}
 </style>
 <div id="stage" aria-label="Portrait 3D du personnage"></div>
-<div id="controls"><label for="definition">Qualité du modèle</label><select id="definition"><option value="sd">SD</option><option value="hd">HD</option></select><button id="retry" hidden>Réessayer</button></div>
+<div id="controls"><label for="definition">Qualité du modèle</label><select id="definition"><option value="sd">SD</option><option value="hd">HD</option></select></div>
+<button id="retry" hidden>Réessayer</button>
 <p id="status" role="status">Chargement du personnage…</p>
 <a id="credit" href="https://wowbocho.com/npc3d/?gv=forever" target="_blank" rel="noopener noreferrer">Moteur WoWBocho · Modèles © Blizzard</a>
 <script type="module" src="${ARMORY_SCRIPT_PATH}"></script>

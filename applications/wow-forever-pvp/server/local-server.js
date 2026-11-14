@@ -21,11 +21,13 @@ export function createLocalServer({
       ["/desktop-cursor.js", ["desktop-cursor.js", "text/javascript; charset=utf-8"]],
       ["/style.css", ["style.css", "text/css; charset=utf-8"]],
       ["/model.js", ["model.js", "text/javascript; charset=utf-8"]],
+      ["/character-stats.js", ["character-stats.js", "text/javascript; charset=utf-8"]],
       ["/identity.js", ["identity.js", "text/javascript; charset=utf-8"]],
       ["/activity.js", ["activity.js", "text/javascript; charset=utf-8"]],
       ["/map-regions.js", ["map-regions.js", "text/javascript; charset=utf-8"]],
       ["/map-outlines.js", ["map-outlines.js", "text/javascript; charset=utf-8"]],
       ["/armory.js", ["armory.js", "text/javascript; charset=utf-8"]],
+      ["/avatar-cache.js", ["avatar-cache.js", "text/javascript; charset=utf-8"]],
       ["/item-tooltips.js", ["item-tooltips.js", "text/javascript; charset=utf-8"]],
       ...["human", "orc", "dwarf", "nightelf", "scourge", "tauren", "skyborne"]
         .map((scene) => [`/scenes/${scene}.webp`, [`scenes/${scene}.webp`, "image/webp"]]),

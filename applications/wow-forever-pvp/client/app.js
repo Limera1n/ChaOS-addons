@@ -1,5 +1,6 @@
 import { filterDeaths, formatPlayed, groupZones, guildKey, honorProgress, itemQuality, killLabel, listGuilds, summarize, summarizeGuild } from "./model.js";
-import { itemEnchant, mountArmory } from "./armory.js";
+import { itemEnchantLabel, mountArmory, mountAvatar } from "./armory.js";
+import { statGroups, formatStat } from "./character-stats.js";
 import { AZEROTH, mapContains, mapRegions, projectPosition } from "./map-regions.js";
 import { mapOutlines } from "./map-outlines.js";
 import { bindEquipmentTooltips, hideEquipmentTooltip } from "./item-tooltips.js";
@@ -75,12 +76,12 @@ function equipmentRow(slot, item) {
   const icon = Number.isSafeInteger(item.icon) && item.icon > 0
     ? `<img src="https://zephras.com/icons/card/${item.icon}.jpg" alt="" width="56" height="56" referrerpolicy="no-referrer">`
     : "";
-  const enchant = itemEnchant(item);
-  return `<li class="item" tabindex="0" data-slot="${slot}" data-quality="${quality}">
+  const enchant = itemEnchantLabel(item);
+  return `<li class="item" tabindex="0" aria-label="${escape(slots[slot])} · ${escape(name)}" data-slot="${slot}" data-quality="${quality}">
     <span class="item-icon" aria-hidden="true">${placeholder}${icon}</span>
     <div class="item-info">
       <strong>${escape(name)}</strong>
-      ${enchant ? `<small>Enchantement #${enchant}</small>` : ""}
+      ${enchant ? `<small>${escape(enchant)}</small>` : ""}
     </div>
   </li>`;
 }
@@ -173,7 +174,7 @@ function renderHonorProgress(character, guildSummary = null, guildName = null) {
 }
 
 async function load() {
-  const response = await fetch(API_PATH + "/state");
+  const response = await fetch(API_PATH + "/state", { cache: "no-store" });
   if (!response.ok) throw new Error("Impossible de charger les relevés.");
   state = await response.json();
   allGroups = probableGroups(state.characters);
@@ -213,21 +214,26 @@ function renderRoster() {
     (a, b) => summarize(scopedCharacter(b)).worldHK - summarize(scopedCharacter(a)).worldHK,
   )) {
     const button = document.createElement("button");
-    button.className = "roster-item";
+    button.className = "roster-item roster-player";
     button.setAttribute("aria-pressed", String(character.key === selectedKey));
-    button.innerHTML = `${escape(character.name)}<small>${escape(character.class ?? "Classe inconnue")} · ${count(summarize(scopedCharacter(character)).worldHK)} VH sur la période</small>`;
+    button.innerHTML = `<span class="character-avatar roster-avatar" aria-hidden="true"><span>${escape(character.name.slice(0, 1))}</span></span><span class="roster-player-copy">${escape(character.name)}<small>${escape(character.class ?? "Classe inconnue")} · ${count(summarize(scopedCharacter(character)).worldHK)} VH sur la période</small></span>`;
     button.addEventListener("click", () => {
       if (selectedKey === character.key) return;
       selectedMap = AZEROTH;
       navigate("players", character.key);
     });
     $("#roster").append(button);
+    mountAvatar(button.querySelector(".roster-avatar"), character, summarize(character).latest);
   }
 }
-function armoryEquipment(snapshot) {
+function armoryEquipment(snapshot, character) {
   const items = new Map((snapshot?.equipment ?? []).map((item) => [item.slot, item]));
   const column = (side, label) => `<ul class="equipment equipment-${side}" aria-label="${label}">${equipmentColumns[side].map((slot) => equipmentRow(slot, items.get(slot))).join("")}</ul>`;
   return `<div id="armory-character">
+    <div class="character-layout">
+    <div class="armory-dressing-room">
+    <img class="armory-backdrop" alt="" referrerpolicy="no-referrer" hidden>
+    <div class="armory-model-toolbar"><span class="paperdoll-caption">Équipement</span><label>Modèle <select name="armory-definition" aria-label="Qualité du modèle"><option value="sd">SD</option><option value="hd">HD</option></select></label></div>
     <div class="armory-loadout">
       ${column("left", "Équipement de gauche")}
       <div class="armory-stage">
@@ -238,6 +244,13 @@ function armoryEquipment(snapshot) {
       </div>
       ${column("right", "Équipement de droite")}
       ${column("weapons", "Armes")}
+    </div>
+    </div>
+    <aside class="character-stats" aria-label="Statistiques du personnage">
+      <div class="character-stats-heading"><span class="character-stat-emblem" aria-hidden="true">⚔</span><div><h3>${escape(character.name)}</h3><p><span>Niveau ${count(character.level)}</span> ${escape(character.class ?? "")}</p></div></div>
+      <p class="stats-measurement">${snapshot?.stats ? `Relevées le ${escape(date(snapshot.at))}. Équipement et effets actifs inclus.` : "Statistiques non relevées. Mets à jour l’addon puis importe un nouvel export /cvp export."}</p>
+      ${statGroups.map(([title, rows]) => `<section><h4>${title}</h4><dl>${rows.map(([key, label, unit]) => `<div><dt>${label}</dt><dd>${formatStat(snapshot?.stats?.[key], unit)}</dd></div>`).join("")}</dl></section>`).join("")}
+    </aside>
     </div>
     <div class="armory-footer">
       <span><b class="armory-zone"></b> Équipement relevé le ${escape(date(snapshot?.at))}</span>
@@ -354,9 +367,9 @@ function render() {
   const guild = latest?.guild;
   $("#profile").innerHTML =
     `<section class="armory" aria-labelledby="armory-title">
-    <img class="armory-backdrop" alt="" referrerpolicy="no-referrer" hidden>
     <div class="armory-heading">
     <div class="identity">
+      <div class="character-avatar" aria-label="Avatar du personnage"><span aria-hidden="true">${escape(character.name.slice(0, 1))}</span></div>
       <svg class="sigil" viewBox="0 0 96 100" role="img" aria-label="${escape(character.faction ?? "Faction inconnue")}">${factionMark(character.faction?.toLowerCase())}</svg>
       <div class="armory-identity-copy">
         <h2 id="armory-title">${escape(character.name)}</h2>
@@ -373,7 +386,7 @@ function render() {
       <button type="button" data-profile-view="pvp" aria-controls="armory-pvp activity">Joueur contre joueur</button>
       <button type="button" data-profile-view="character" aria-controls="armory-character">Personnage</button>
     </nav>
-    ${armoryEquipment(latest)}
+    ${armoryEquipment(latest, character)}
     <div id="armory-pvp" hidden>
     <section aria-labelledby="honor-points-title">
       <h3 id="honor-points-title">Points d’honneur</h3>
@@ -394,6 +407,7 @@ function render() {
     ${progressChart()}
     </div>
     </section>`;
+  mountAvatar($("#profile .character-avatar"), character, latest);
   let mounted = false;
   mountCurrentArmory = () => {
     if (mounted) return;
@@ -651,6 +665,20 @@ $("#map-clear-session").addEventListener("click", () => {
   $("#map-current").focus({ preventScroll: true });
 });
 $("#open-import").addEventListener("click", openImport);
+$("#refresh-app").addEventListener("click", async () => {
+  const button = $("#refresh-app");
+  button.disabled = true;
+  button.textContent = "Actualisation…";
+  try {
+    await load();
+    $("#status").textContent = "Relevés actualisés depuis le serveur.";
+  } catch (error) {
+    $("#status").textContent = error.message;
+  } finally {
+    button.disabled = false;
+    button.textContent = "↻ Actualiser";
+  }
+});
 $("#empty-import").addEventListener("click", openImport);
 $("#close-import").addEventListener("click", () => $("#import-dialog").close());
 $("#search").addEventListener("input", renderRoster);

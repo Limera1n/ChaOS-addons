@@ -9,7 +9,7 @@ import { validateImport } from "../server/import-schema.js";
 import { createLocalServer } from "../server/local-server.js";
 import { API_PATH, IMPORT_TYPE } from "../server/routes.js";
 import { filterDeaths, groupZones, honorProgress, itemQuality, summarize } from "../client/model.js";
-import { ARMORY_VIEW_PATH, armoryParams, armoryRace } from "../client/armory.js";
+import { ARMORY_VIEW_PATH, armoryParams, armoryRace, itemEnchant } from "../client/armory.js";
 import { installEnchantModels, selectAppearance } from "../client/armory-viewer.js";
 import { ARMORY_ASSET_PATH, serveArmoryAsset, serveArmoryMetadata } from "../server/armory.js";
 import { AZEROTH, mapContains, projectPosition } from "../client/map-regions.js";
@@ -53,6 +53,42 @@ test("armory keeps legacy race names and uses the dressing room slot order", () 
   const appearance = { raceId: 8, sex: 2, choices: [{ optionId: 31, choiceId: 130 }] };
   assert.equal(armoryParams(8, 2, [], appearance).get("a"), "0.31-130");
   assert.equal(armoryParams(8, 3, [], appearance).get("a"), "1");
+});
+
+test("weapon enchants survive stripped links, explicit IDs and compact imports", (t) => {
+  const staff = { slot: 16, itemId: 271215, link: "[Coldspire Staff]",
+    tooltip: [{ text: "Enchanted: Weapon Damage +5", effect: true }] };
+  assert.equal(armoryParams(5, 3, [staff]).get("g"), "q271215e1897");
+  assert.equal(itemEnchant({ ...staff, slot: 1 }), undefined);
+  assert.equal(itemEnchant({ ...staff, tooltip: [{ text: "Weapon Damage +5" }] }), undefined);
+  assert.equal(itemEnchant({ ...staff, enchantId: 803 }), "803");
+  assert.equal(itemEnchant({ ...staff, enchantId: 0 }), undefined);
+  assert.equal(itemEnchant({ ...staff, link: "|Hitem:271215:0:0|h[Staff]|h" }), undefined);
+  assert.equal(itemEnchant({ ...staff, link: "|Hitem:271215:1900:0|h[Staff]|h" }), "1900");
+  const input = batch();
+  input.snapshots[1].equipment = [staff];
+  const store = createTrackerStore({ dataDir: temporary(t) });
+  store.importBatch(input);
+  const enriched = structuredClone(input);
+  enriched.snapshots[1].equipment[0].enchantId = 1897;
+  enriched.equipmentSets = [enriched.snapshots[1].equipment];
+  delete enriched.snapshots[1].equipment;
+  enriched.snapshots[1].equipmentRef = 0;
+  assert.equal(store.importBatch(enriched).added, 0);
+  assert.equal(store.read().characters[0].snapshots[1].equipment[0].enchantId, 1897);
+  enriched.equipmentSets[0][0].link = "|Hitem:271215:1897:0|h[Coldspire Staff]|h";
+  assert.equal(store.importBatch(enriched).added, 0, "A lossless export enriches the same old observation");
+  assert.equal(store.read().characters[0].snapshots[1].equipment[0].link, enriched.equipmentSets[0][0].link);
+  assert.equal(store.importBatch(input).added, 0, "An older stripped export must not erase the repaired link");
+  const conflicting = structuredClone(enriched);
+  conflicting.equipmentSets[0][0].link = "|Hitem:271215:803:0|h[Coldspire Staff]|h";
+  assert.throws(() => store.importBatch(conflicting), /Conflit/);
+  enriched.equipmentSets[0][0].enchantId = 803;
+  assert.throws(() => store.importBatch(enriched), /Conflit/);
+  for (const invalid of [-1, 1.5, "1897", 1000000000]) {
+    enriched.equipmentSets[0][0].enchantId = invalid;
+    assert.throws(() => validateImport(enriched), /Export invalide/);
+  }
 });
 
 test("barber choices translate between HD and SD, including captures made in SD", () => {

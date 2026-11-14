@@ -51,7 +51,58 @@ async function loadScript(file) {
   });
 }
 
-async function loadEngine() {
+// Attachment 11 is the helmet anchor, in the engine's Y-up world space.
+// Prefer it to a fixed percentage of body height (dwarves, tauren, etc.).
+export function frameHead(renderer) {
+  renderer.draw();
+  const actor = renderer.actors[0];
+  const bounds = actor?.getBounds();
+  if (!bounds) throw new Error("Dimensions de la tête indisponibles.");
+  const height = bounds[1][2] - bounds[0][2];
+  if (!Number.isFinite(height) || height <= 0) throw new Error("Dimensions du modèle invalides.");
+  const head = actor._own?.r?.getAttachmentTransform?.(11);
+  const hasHead = head && [head[12], head[13], head[14]].every(Number.isFinite);
+  const center = hasHead
+    ? [head[12], head[13], head[14]]
+    : [0, bounds[0][2] + height * 0.86, 0];
+  renderer._c = [center[0], 0, center[2]];
+  renderer._lift = center[1];
+  renderer.translation = [0, 0, 0];
+  renderer.azimuth = Math.PI * 1.5;
+  renderer.zenith = Math.PI / 2;
+  // Tight face portrait: the former 34% framing included shoulders and chest.
+  const span = height * 0.20;
+  renderer.distance = span / (2 * Math.tan(renderer.fov * Math.PI / 360));
+  renderer.zoom.current = renderer.zoom.target = 0;
+  renderer.doUpdateBounds = false;
+  actor.setAnimPaused(true);
+  renderer.draw();
+}
+
+export function viewerEquipment(equipment, portrait) {
+  return portrait ? equipment.filter((item) => item.slot === 1).map((item) => ({ ...item, enchantId: 0 })) : equipment;
+}
+
+export function capturePortrait(renderer, canvas) {
+  renderer.draw();
+  const fields = ["_c", "_lift", "translation", "azimuth", "zenith", "distance", "doUpdateBounds"];
+  const saved = Object.fromEntries(fields.map((key) => [key, renderer[key]]));
+  const { width, height, _paused: paused } = renderer;
+  const zoom = { ...renderer.zoom };
+  try {
+    renderer.onResize(96, 96);
+    frameHead(renderer);
+    return canvas.toDataURL("image/png");
+  } finally {
+    renderer.onResize(width, height);
+    Object.assign(renderer, saved);
+    Object.assign(renderer.zoom, zoom);
+    renderer.actors[0]?.setAnimPaused(Boolean(paused));
+    renderer.draw();
+  }
+}
+
+async function loadEngine(enchantEffects = true) {
   const assetBase = new URL(ASSET_PATH, location.origin).href;
   window.OWN_BASE = assetBase + "wowbocho-owni/";
   window.OWN_FV_BASE = assetBase + "wowbocho-ownfi/";
@@ -74,6 +125,7 @@ async function loadEngine() {
     return [url, await response.text()];
   })));
   for (const file of ["loader", "wbm", "particles", "dress", "human", "zam"]) await loadScript(file);
+  if (!enchantEffects) return;
   const response = await fetch(ENGINE_ROOT + "visuals.json");
   if (!response.ok) throw new Error("Le catalogue des effets d’enchantement est inaccessible.");
   const visuals = await response.json();
@@ -86,6 +138,7 @@ async function startViewer() {
   const definition = document.querySelector("#definition");
   const retry = document.querySelector("#retry");
   const params = new URLSearchParams(location.search);
+  const portrait = params.get("portrait") === "1";
   const race = Number(params.get("r"));
   const body = params.get("a");
   const female = body.startsWith("1");
@@ -98,10 +151,10 @@ async function startViewer() {
     return { optionId, choiceId };
   });
   const slots = [1, 2, 3, 15, 5, 4, 19, 9, 10, 6, 7, 8, 11, 12, 13, 14, 16, 17, 18];
-  const equipment = (params.get("g") ?? "").split(".").filter(Boolean).map((code) => {
+  const equipment = viewerEquipment((params.get("g") ?? "").split(".").filter(Boolean).map((code) => {
     const [itemId, enchantId] = code.slice(1).split("e").map(Number);
     return { slot: slots[code.charCodeAt(0) - 97], itemId, enchantId };
-  });
+  }), portrait);
   const enchantments = equipment.some((item) => item.enchantId)
     ? fetch("https://wowbocho.com/data/items/ench.json").then((response) => response.ok ? response.json() : null).catch(() => null)
     : Promise.resolve(null);
@@ -117,11 +170,11 @@ async function startViewer() {
     retry.hidden = true;
     status.textContent = "Chargement du personnage…";
     try {
-      engine ??= loadEngine().catch((error) => { engine = null; throw error; });
-      catalog ??= fetch("https://wowbocho.com/data/forever/items/disp.json").then((response) => {
+      engine ??= loadEngine(!portrait).catch((error) => { engine = null; throw error; });
+      catalog ??= equipment.length ? fetch("https://wowbocho.com/data/forever/items/disp.json").then((response) => {
         if (!response.ok) throw new Error("Le catalogue d’équipement est inaccessible.");
         return response.json();
-      }).catch((error) => { catalog = null; throw error; });
+      }).catch((error) => { catalog = null; throw error; }) : Promise.resolve({ d: {} });
       metadata ??= choices.length ? fetch(`${METADATA_PATH}?model=${hdModel}`).then((response) => {
         if (!response.ok) throw new Error("La correspondance des apparences HD/SD est inaccessible.");
         return response.json();
@@ -161,6 +214,26 @@ async function startViewer() {
       view?.destroy();
       view = next;
       stage.replaceChildren(container);
+      if (portrait) {
+        const renderer = next.renderer;
+        const image = new Image();
+        image.alt = "Portrait du personnage";
+        image.src = capturePortrait(renderer, container.querySelector("canvas"));
+        window.parent.postMessage({ type: "chaos-avatar-ready", image: image.src }, location.origin);
+        stage.replaceChildren(image);
+        next.destroy();
+        view = null;
+        status.textContent = "";
+        return;
+      }
+      // The visible character is already loaded. Reuse its renderer to create
+      // the avatar too, avoiding another engine/download and a queue timeout.
+      try {
+        const image = capturePortrait(next.renderer, container.querySelector("canvas"));
+        window.parent.postMessage({ type: "chaos-avatar-ready", image }, location.origin);
+      } catch (error) {
+        console.warn("Capture de l’avatar depuis le personnage", error);
+      }
       const warnings = [];
       if (selection.unmatched) warnings.push(`${selection.unmatched} choix du barbier sans équivalent dans ce modèle`);
       if (missingItems) warnings.push(`${missingItems} pièce(s) sans modèle disponible`);
@@ -168,6 +241,7 @@ async function startViewer() {
     } catch (error) {
       if (stale()) return;
       console.warn("Chargement du portrait 3D", error);
+      if (portrait) window.parent.postMessage({ type: "chaos-avatar-error" }, location.origin);
       status.textContent = "Le personnage n’a pas pu être chargé. Réessaie dans un instant.";
       retry.hidden = false;
       stage.querySelectorAll(".model").forEach((container) => { if (!container.querySelector("canvas")) container.remove(); });
@@ -175,7 +249,7 @@ async function startViewer() {
   }
   definition.addEventListener("change", render);
   retry.addEventListener("click", render);
-  new ResizeObserver(() => {
+  if (!portrait) new ResizeObserver(() => {
     view?.renderer.onResize(stage.clientWidth, stage.clientHeight);
   }).observe(stage);
   window.addEventListener("pagehide", () => { stopped = true; generation++; view?.destroy(); });

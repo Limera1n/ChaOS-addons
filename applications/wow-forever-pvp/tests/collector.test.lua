@@ -52,7 +52,7 @@ function GetPVPLifetimeStats() return hk end
 function GetGuildInfo() return "Test Guild" end
 function GetRealZoneText() return "Test Zone" end
 function GetInventoryItemID(_, slot) if slot == 1 then return 123 end end
-function GetInventoryItemLink() return '|Hitem:123|h[Test "Hat"]|h' end
+function GetInventoryItemLink() return '|Hitem:123:1897:0|h[Test "Hat"]|h' end
 function GetInventoryItemTexture() return 133138 end
 C_Item = { GetItemQualityByID = function() return 4 end }
 function GetBuildInfo() return "1.60.1", "test-build" end
@@ -296,6 +296,9 @@ assert(payload:find('"victim":"Victim%-Other Realm"') and payload:find('"type":"
 assert(payload:find('"raceId":1') and payload:find('"sex":3'))
 assert(payload:find('"appearance":') and payload:find('"choiceId":120'))
 assert(payload:find('"icon":133138') and payload:find('"quality":4'))
+assert(payload:find('"enchantId":1897', 1, true))
+assert(payload:find('\\u007cHitem:123:1897:0\\u007ch', 1, true), "Copied JSON must retain hyperlink data without WoW markup")
+assert(not payload:find('|', 1, true), "WoW must not interpret any pipe as markup in the export field")
 assert(payload:find('"transmogItemId":456'))
 assert(payload:find('"playedSeconds":123456') and payload:find('"playedAt":'))
 assert(payload:find('"text":"+2 Agilité"', 1, true) and payload:find('"right":"Tissu"', 1, true))

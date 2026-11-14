@@ -1,4 +1,4 @@
-ChaOSWorldPvP = { version = "0.5.12" }
+ChaOSWorldPvP = { version = "0.5.13" }
 local ns = ChaOSWorldPvP
 -- Send each distinct loadout once, while retaining every dated observation.
 -- Copy snapshot metadata so exporting never rewrites SavedVariables history.
@@ -23,7 +23,9 @@ end
 local arrayMeta = {}
 function ns.Array(value) return setmetatable(value or {}, arrayMeta) end
 local function quote(value)
-    return '"' .. value:gsub('[%z\1-\31\\"]', function(char)
+    -- WoW EditBoxes render hyperlink/color markup before copying. Escaping the
+    -- pipe keeps item payloads intact while remaining ordinary JSON strings.
+    return '"' .. value:gsub('[%z\1-\31\\"|]', function(char)
         return string.format("\\u%04x", string.byte(char))
     end) .. '"'
 end

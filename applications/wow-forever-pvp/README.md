@@ -26,7 +26,25 @@ convertit les coordonnées selon leur position et leur échelle.
 
 ### Portrait 3D
 
+Le petit avatar de la liste et de la fiche est conservé comme image PNG dans
+le navigateur (jusqu’à 80 apparences). Les deux vues partagent la même image,
+y compris après rechargement si le stockage local est disponible. Seuls les
+portraits visibles déclenchent une génération ; les rendus sont exécutés un
+par un et survivent à la navigation. Le portrait charge seulement le casque
+et l’apparence du personnage, sans les autres pièces ni les effets des armes.
+La caméra vise le point d’attache du casque pour cadrer la tête, puis le rendu
+est capturé en PNG 96 × 96 et le moteur 3D est libéré. Le modèle de base reste
+un fichier corps entier ; ses parties ne sont pas téléchargeables séparément.
+Un changement de casque ou d’apparence produit une nouvelle image ; changer
+d’arme ou de bottes ne l’invalide pas. Effacer le stockage du site efface ce cache.
+L’API de portrait du jeu dessine une texture interne : l’addon ne peut pas en
+extraire une image à joindre à son export JSON.
+
 La fiche joueur place le modèle 3D entre les emplacements d’équipement.
+Elle reprend la disposition du panneau en jeu : cadre bronze, icônes seules
+autour du modèle, armes en bas et caractéristiques dans un panneau défilant
+à droite. Les noms et effets restent accessibles en infobulle et au clavier.
+Sur petit écran, les caractéristiques passent sous le vestiaire.
 Le décor de la fiche suit la zone de départ de la race. Les décors sont inclus
 dans l’application pour rester disponibles lorsque le site source change de version.
 Les enchantements qui possèdent un effet visuel affichent leur halo sur le modèle 3D.
@@ -37,10 +55,19 @@ dernier relevé. Le modèle SD est sélectionné par défaut lorsqu’il est dis
 Le sélecteur HD/SD se trouve en haut de l’aperçu et conserve
 les choix qui ont un équivalent dans l’autre modèle. Une indication signale
 les choix ou les objets indisponibles. Les Skyborne sont disponibles en HD.
+Dans la fiche, le sélecteur occupe une barre séparée au-dessus de l’équipement.
+Le modèle visible peut aussi fournir la capture de l’avatar à la liste et à
+l’en-tête, sans second chargement 3D ; la caméra retrouve ensuite sa position.
 Les anciens relevés peuvent utiliser les sélecteurs manuels. La visionneuse
 demande WebGL 2 et un accès aux ressources externes de WoWBocho et Wowhead.
 Le serveur relaie les fichiers des modèles et les correspondances HD/SD,
 avec un cache mémoire limité à 64 Mio pour les fichiers des modèles.
+
+Le collecteur conserve l’identifiant d’enchantement séparément et protège les
+liens d’objets dans le JSON contre leur interprétation par la zone de copie WoW.
+Pour les anciens exports dont les liens ont déjà été remplacés par le nom de
+l’objet, la ligne explicite `Enchanted: Weapon Damage +5` permet de retrouver
+le halo Impact sans modifier les relevés enregistrés.
 
 Avec le collecteur 0.5.5, ouvre le salon du barbier en jeu pour relever
 les choix actuels du personnage, comme la coiffure, les couleurs, le
