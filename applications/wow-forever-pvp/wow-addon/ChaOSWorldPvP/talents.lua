@@ -17,6 +17,13 @@ local function coordinate(value)
     value = read(function() return value end)
     if type(value) == "number" and value == value and math.abs(value) <= 1000000 then return value end
 end
+local function description(spellId)
+    local value = read(C_Spell and C_Spell.GetSpellDescription, spellId)
+    if type(value) ~= "string" then return nil end
+    value = value:gsub("|c%x%x%x%x%x%x%x%x", ""):gsub("|r", "")
+        :gsub("|T.-|t", ""):gsub("|A.-|a", ""):gsub("[%z\1-\31]", " ")
+    if #value > 0 and #value <= 3000 then return value end
+end
 local function collect(at)
     local api = C_Traits
     local configId = integer(read(C_ClassTalents and C_ClassTalents.GetActiveConfigID), 1000000000)
@@ -31,6 +38,22 @@ local function collect(at)
         if type(ids) ~= "table" or #ids == 0 or #ids > 1000 then return nil end
         local info = read(api.GetTreeInfo, configId, treeId)
         local tree = { id = treeId, name = info and label(info.titleText), nodes = ns.Array() }
+        local displays = read(api.GetGroupDisplayInfoByTreeID, treeId)
+        local groupIds = {}
+        if type(displays) == "table" and #displays > 0 and #displays <= 16 then
+            local groups = ns.Array()
+            for index, display in ipairs(displays) do
+                local id = integer(read(function() return display.groupID end), 1000000000)
+                local name = label(read(function() return display.displayName end))
+                if id and id > 0 and name and not groupIds[id] then
+                    groupIds[id] = true
+                    groups[#groups + 1] = { id = id, name = name,
+                        icon = integer(read(function() return display.icon end), 1000000000),
+                        order = integer(read(function() return display.orderIndex end), 1000000) or index }
+                end
+            end
+            if #groups > 0 then tree.groups = groups end
+        end
         for _, nodeId in ipairs(ids) do
             nodeId = integer(nodeId, 1000000000)
             if not nodeId or nodeId == 0 then return nil end
@@ -42,6 +65,16 @@ local function collect(at)
                 local item = { id = nodeId, x = coordinate(node.posX), y = coordinate(node.posY),
                     rank = rank, maxRank = integer(node.maxRanks, 100), spent = integer(node.ranksPurchased, 100),
                     entries = ns.Array(), edges = ns.Array() }
+                local memberships = read(function() return node.groupIDs end)
+                if type(memberships) == "table" then
+                    for _, groupId in ipairs(memberships) do
+                        groupId = integer(groupId, 1000000000)
+                        if groupId and groupIds[groupId] then
+                            if item.groupId then item.groupId = nil; break end
+                            item.groupId = groupId
+                        end
+                    end
+                end
                 if not item.x or not item.y or not item.maxRank or not item.spent
                     or rank > item.maxRank or item.spent > rank then return nil end
                 if type(node.entryIDs) ~= "table" or #node.entryIDs == 0 or #node.entryIDs > 16 then return nil end
@@ -57,6 +90,7 @@ local function collect(at)
                     local spell = spellId and read(C_Spell and C_Spell.GetSpellInfo, spellId)
                     local subtree = entry.subTreeID and read(api.GetSubTreeInfo, configId, entry.subTreeID)
                     item.entries[#item.entries + 1] = { id = entryId, spellId = spellId,
+                        description = spellId and description(spellId),
                         name = (definition and label(definition.overrideName)) or (spell and label(spell.name))
                             or (subtree and label(subtree.name)) or ("Talent #" .. entryId),
                         icon = (definition and integer(definition.overrideIcon, 1000000000)) or (spell and integer(spell.iconID, 1000000000)) }
@@ -100,6 +134,7 @@ function ns.CaptureTalents(profile, at)
         ns.Array(saved.trees)
         for _, tree in ipairs(saved.trees) do
             ns.Array(tree.nodes)
+            if tree.groups then ns.Array(tree.groups) end
             for _, node in ipairs(tree.nodes) do ns.Array(node.entries); ns.Array(node.edges) end
         end
     end

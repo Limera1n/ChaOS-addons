@@ -9,10 +9,14 @@ C_Traits = {
     ConfigHasStagedChanges = function() return staged end,
     GetConfigInfo = function() return { name = "Build test", treeIDs = { 1 } } end,
     GetTreeInfo = function() return { titleText = "Arbre de classe" } end,
+    GetGroupDisplayInfoByTreeID = function() return {
+        { groupID = 1, displayName = "Arcanes", orderIndex = 1, icon = 456 },
+    } end,
     GetTreeNodes = function() return { 10, 20, 30 } end,
     GetNodeInfo = function(_, id)
         if missing then return nil end
         return { posX = id * 10, posY = id * 20, isVisible = id ~= 30,
+            groupIDs = { 1 },
             activeRank = id == 10 and 2 or 0, maxRanks = 5, ranksPurchased = id == 10 and 1 or 0,
             activeEntry = id == 10 and { entryID = 101, rank = 2 } or nil,
             entryIDs = id == 10 and { 100, 101 } or { 200 },
@@ -21,13 +25,18 @@ C_Traits = {
     GetEntryInfo = function(_, id) return { definitionID = id } end,
     GetDefinitionInfo = function(id) return { spellID = id + 1000 } end,
 }
-C_Spell = { GetSpellInfo = function(id) return { name = "Sort " .. id, iconID = 123 } end }
+C_Spell = { GetSpellInfo = function(id) return { name = "Sort " .. id, iconID = 123 } end,
+    GetSpellDescription = function() return "|cff00ff00Dégâts augmentés.|r" end }
 local result = ns.CaptureTalents(profile, 100)
 assert(result.at == 100 and result.configId == 12)
 assert(#result.trees[1].nodes == 2)
 local node = result.trees[1].nodes[1]
 assert(node.rank == 2 and node.spent == 1 and node.activeEntryId == 101)
 assert(#node.entries == 2 and node.entries[2].name == "Sort 1101")
+assert(node.entries[2].description == "Dégâts augmentés.")
+assert(node.groupId == 1)
+assert(result.trees[1].groups[1].name == "Arcanes")
+assert(result.trees[1].groups[1].icon == 456)
 assert(#node.edges == 1 and node.edges[1] == 20, "Hidden node edges are removed")
 staged = true
 assert(ns.CaptureTalents(profile, 110).at == 100, "Draft builds cannot replace committed talents")

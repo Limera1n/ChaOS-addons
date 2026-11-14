@@ -199,20 +199,30 @@ ou les valeurs protégées sont ignorées ; une valeur manquante reste inconnue.
 
 Pour préparer un ZIP à partager sous Windows, lancer `npm run package:addon`.
 Le fichier est produit à la racine du dépôt dans
-`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.16.zip` (hors Git et hors du paquet
+`artifacts/wow-forever-pvp/ChaOSWorldPvP-0.5.21.zip` (hors Git et hors du paquet
 installable). Décompresser
 ce ZIP dans `Interface/AddOns` donne directement le dossier de l'addon.
 
-## Talents et build actif (collecteur 0.5.16)
+## Talents et build actif (collecteur 0.5.21)
 
 La fiche propose **Talents** entre **Personnage** et **Métiers**. Elle affiche
 l’arbre du build actif validé : talents appris ou non, rangs, liens, choix actifs
 et total des points investis. Les rangs accordés gratuitement sont distingués
 des points achetés dans le détail. Les lignes et colonnes suivent les positions
-du jeu ; les arbres larges défilent sur petit écran. Le survol, le clavier et
-le toucher permettent de consulter le nom et les rangs d’un talent.
+du jeu ; l’arbre s’adapte à la largeur du panneau sans défilement horizontal.
+Les branches sont présentées dans des panneaux distincts, côte à côte quand
+la largeur le permet et empilés sur mobile. Chaque panneau affiche son nom,
+son icône et ses points investis. Les dépendances sont fléchées, les talents
+non appris grisés, et les rangs appris affichés en bas des icônes.
+Le collecteur relève les groupes via `C_Traits.GetGroupDisplayInfoByTreeID`
+et les relie aux nœuds via `groupIDs`. Les anciens arbres classiques à douze
+colonnes sont séparés en trois branches de quatre colonnes uniquement si
+aucune dépendance ne traverse leurs limites. Leurs noms sont déduits de la
+classe lorsqu’elle est connue ; sinon les branches restent numérotées.
+Le survol, le clavier et le toucher affichent une infobulle avec le nom,
+les rangs et la description du talent lorsqu’elle a été relevée.
 
-Mettre le site à jour, installer le collecteur **0.5.16**, ouvrir les talents
+Mettre le site à jour, installer le collecteur **0.5.21**, ouvrir les talents
 en jeu et valider ou annuler les changements en attente. Lancer `/cvp export`
 puis importer le JSON sur le site. Seul le build actif est relevé, pas tous
 les builds sauvegardés ni les talents d’un autre personnage inspecté.
@@ -230,14 +240,33 @@ utilisent des API simulées.
 Tests spécifiques : `node --test tests/talents.test.js` et
 `lua tests/talents.test.lua`.
 
-## Métiers (collecteur 0.5.15)
+## Métiers (collecteur 0.5.21)
 
 La fiche joueur propose un onglet **Métiers** avec les niveaux actuels, les
-recettes apprises et une recherche par nom de craft. La quantité fabricable
-est celle renvoyée par le jeu au moment du relevé ; une quantité indisponible
-reste « Non relevée » et zéro reste une vraie quantité.
+recettes apprises et une recherche par nom de craft. Chaque recette présente
+l’icône de l’objet fabriqué (ou celle du sort d’enchantement), son nom et une
+infobulle accessible au survol, au clavier et au toucher. Les quantités
+fabricables ne sont pas affichées. Les anciens relevés restent lisibles ;
+un nouvel export avec le collecteur à jour complète les icônes et les fiches.
+Les recettes sont regroupées dans les catégories et sous-catégories du jeu,
+dans leur ordre d’affichage, avec des sections repliables et un compteur.
+Dans chaque catégorie, les recettes du relevé sont affichées en ordre inverse,
+avec les derniers crafts en haut. Ce tri s’applique aussi aux anciens relevés.
+La recherche porte aussi sur les noms des catégories et ouvre les sections
+correspondantes ; l’effacer restaure leur état précédent. Les anciens relevés
+sans classement restent dans « Catégorie non relevée » jusqu’au prochain export.
+Les infobulles affichent les composants requis pour une fabrication avec leurs
+quantités issues de `C_TradeSkillUI.GetRecipeSchematic`, indépendamment du stock
+et du nombre fabricable. Les alternatives et les composants facultatifs sont
+distingués. Les lignes brutes « Reagents » des infobulles de sorts sont remplacées
+par ces données ; les anciens relevés demandent un nouvel export pour compléter
+les quantités. Les codes de saut de ligne `|n` ne sont plus affichés tels quels.
+Chaque composant est précédé d’une icône de 18 px, relevée avec son identifiant
+de texture en jeu. Les alternatives et les monnaies affichent aussi leur icône.
+Les anciens exports sans texture gardent les noms et quantités alignés ; ouvrir
+chaque métier avec le collecteur 0.5.21 puis réimporter complète les icônes.
 
-Mettre à jour le site, installer le collecteur **0.5.15**, puis ouvrir chaque
+Mettre à jour le site, installer le collecteur **0.5.21**, puis ouvrir chaque
 métier en jeu et attendre le chargement de sa liste. Lancer `/cvp export`,
 puis importer le JSON sur le site. Les métiers de récolte et secondaires sont
 inclus dans les niveaux ; une liste de recettes non disponible reste indiquée

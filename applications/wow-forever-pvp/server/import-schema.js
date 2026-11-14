@@ -25,8 +25,17 @@ function integer(value, max = MAX_TIME) {
   if (!Number.isSafeInteger(value) || value < 0 || value > max) fail();
   return value;
 }
+const positiveId = (id) => { const result = integer(id, 1000000000); if (!result) fail(); return result; };
 function optionalString(value, max) {
   return value == null ? null : string(value, max);
+}
+function tooltipLines(value) {
+  return list(value, 20).map((line) => {
+    record(line);
+    return { text: string(line.text, 300),
+      ...(line.right == null ? {} : { right: string(line.right, 300) }),
+      ...(line.effect === true ? { effect: true } : {}) };
+  });
 }
 function list(value, max) {
   if (!Array.isArray(value) || value.length > max) fail();
@@ -96,7 +105,6 @@ function snapshotEquipment(item, sets) {
 function talents(value, exportedAt) {
   record(value);
   const at = integer(value.at);
-  const positiveId = (id) => { const result = integer(id, 1000000000); if (!result) fail(); return result; };
   const unique = (values) => { if (new Set(values).size !== values.length) fail(); };
   const coordinate = (n) => { if (typeof n !== "number" || !Number.isFinite(n) || Math.abs(n) > 1000000) fail(); return n; };
   if (at > exportedAt) fail();
@@ -108,7 +116,8 @@ function talents(value, exportedAt) {
         record(entry);
         return { id: positiveId(entry.id), name: string(entry.name),
           ...(entry.spellId == null ? {} : { spellId: positiveId(entry.spellId) }),
-          ...(entry.icon == null ? {} : { icon: integer(entry.icon, 1000000000) }) };
+          ...(entry.icon == null ? {} : { icon: integer(entry.icon, 1000000000) }),
+          ...(entry.description == null ? {} : { description: string(entry.description, 3000) }) };
       });
       if (!entries.length) fail();
       unique(entries.map((entry) => entry.id));
@@ -116,6 +125,7 @@ function talents(value, exportedAt) {
         rank: integer(node.rank, 100), maxRank: integer(node.maxRank, 100), spent: integer(node.spent, 100),
         entries, edges: list(node.edges, 32).map(positiveId),
         ...(node.activeEntryId == null ? {} : { activeEntryId: positiveId(node.activeEntryId) }) };
+      if (node.groupId != null) result.groupId = positiveId(node.groupId);
       unique(result.edges);
       if (result.rank > result.maxRank || result.spent > result.rank || result.edges.includes(result.id)) fail();
       if (result.activeEntryId != null && !entries.some((entry) => entry.id === result.activeEntryId)) fail();
@@ -126,7 +136,19 @@ function talents(value, exportedAt) {
     unique(nodes.map((node) => node.id));
     const ids = new Set(nodes.map((node) => node.id));
     if (nodes.some((node) => node.edges.some((id) => !ids.has(id)))) fail();
-    return { id: positiveId(tree.id), ...(tree.name == null ? {} : { name: string(tree.name) }), nodes };
+    let groups;
+    if (tree.groups != null) {
+      groups = list(tree.groups, 16).map((group) => {
+        record(group);
+        return { id: positiveId(group.id), name: string(group.name), order: integer(group.order, 1000000),
+          ...(group.icon == null ? {} : { icon: integer(group.icon, 1000000000) }) };
+      });
+      if (!groups.length) fail();
+      unique(groups.map((group) => group.id));
+    }
+    if (nodes.some((node) => node.groupId != null && !groups?.some((group) => group.id === node.groupId))) fail();
+    return { id: positiveId(tree.id), ...(tree.name == null ? {} : { name: string(tree.name) }), nodes,
+      ...(groups == null ? {} : { groups }) };
   });
   if (!trees.length) fail();
   unique(trees.map((tree) => tree.id));
@@ -154,7 +176,38 @@ function professions(value, exportedAt) {
         const id = integer(recipe.id, 1000000000);
         if (!id || ids.has(id)) fail();
         ids.add(id);
-        return { id, name: string(recipe.name), ...(recipe.available == null ? {} : { available: integer(recipe.available, 1000000) }) };
+        let categoryPath;
+        if (recipe.categoryPath != null) {
+          const categoryIds = new Set();
+          categoryPath = list(recipe.categoryPath, 8).map((category) => {
+            record(category);
+            const categoryId = positiveId(category.id);
+            if (categoryIds.has(categoryId)) fail();
+            categoryIds.add(categoryId);
+            return { id: categoryId, name: string(category.name), order: integer(category.order, 1000000) };
+          });
+          if (!categoryPath.length) fail();
+        }
+        return { id, name: string(recipe.name), ...(recipe.available == null ? {} : { available: integer(recipe.available, 1000000) }),
+          ...(categoryPath == null ? {} : { categoryPath }),
+          ...(recipe.reagents == null ? {} : { reagents: list(recipe.reagents, 32).map((slot) => {
+            record(slot);
+            const options = list(slot.options, 32).map((option) => {
+              record(option);
+              if ((option.itemId == null) === (option.currencyId == null)) fail();
+              const quantity = integer(option.quantity, 1000000);
+              if (!quantity) fail();
+              return { name: string(option.name), quantity,
+                ...(option.icon == null ? {} : { icon: integer(option.icon, 1000000000) }),
+                ...(option.itemId == null ? { currencyId: positiveId(option.currencyId) } : { itemId: positiveId(option.itemId) }) };
+            });
+            if (!options.length || (slot.optional != null && typeof slot.optional !== "boolean")) fail();
+            return { ...(slot.optional === true ? { optional: true } : {}), options };
+          }) }),
+          ...(recipe.itemId == null ? {} : { itemId: positiveId(recipe.itemId) }),
+          ...(recipe.icon == null ? {} : { icon: integer(recipe.icon, 1000000000) }),
+          ...(recipe.description == null ? {} : { description: string(recipe.description, 3000) }),
+          ...(recipe.tooltip == null ? {} : { tooltip: tooltipLines(recipe.tooltip) }) };
       });
     }
     return result;

@@ -5,7 +5,7 @@ import { professionsPanel, bindProfessionSearch } from "./professions.js";
 import { talentsPanel, bindTalents } from "./talents.js";
 import { AZEROTH, mapContains, mapRegions, projectPosition } from "./map-regions.js";
 import { createMapView } from "./map-view.js";
-import { bindEquipmentTooltips, hideEquipmentTooltip } from "./item-tooltips.js";
+import { bindEquipmentTooltips, bindProfileTooltips, hideEquipmentTooltip } from "./item-tooltips.js";
 import { installDesktopCursor } from "./desktop-cursor.js";
 import { canonicalLinkKey, scopeLabel } from "./identity.js";
 import { activityCharacter, dailyActivity, dayBounds, dayKey, filterDay, formatSessionDuration, guildEvents, probableGroups, selectGroupSessions, sortActivity } from "./activity.js";
@@ -84,7 +84,7 @@ function equipmentRow(slot, item) {
     <span class="item-icon" aria-hidden="true">${placeholder}${icon}</span>
     <div class="item-info">
       <strong>${escape(name)}</strong>
-      ${enchant ? `<small>${escape(enchant)}</small>` : ""}
+      ${enchant ? `<small class="item-enchant" tabindex="0">${escape(enchant)}</small>` : ""}
     </div>
   </li>`;
 }
@@ -394,7 +394,7 @@ function render() {
       <button type="button" data-profile-view="professions" aria-controls="armory-professions">Métiers</button>
     </nav>
     ${armoryEquipment(latest, character)}
-    ${talentsPanel(character.talents)}
+    ${talentsPanel(character.talents, character.class)}
     ${professionsPanel(character.professions)}
     <div id="armory-pvp" hidden>
     <section aria-labelledby="honor-points-title">
@@ -426,6 +426,7 @@ function render() {
   bindEquipmentTooltips($("#profile"), latest?.equipment ?? []);
   bindProfessionSearch($("#profile"));
   bindTalents($("#profile"));
+  bindProfileTooltips($("#profile"), character.professions, character.talents);
   for (const button of $(".armory").querySelectorAll("[data-profile-view]")) {
     button.addEventListener("click", () => setProfileView(button.dataset.profileView));
   }

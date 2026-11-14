@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { validateImport } from "../server/import-schema.js";
 import { createTrackerStore } from "../server/store.js";
 import { createLocalServer } from "../server/local-server.js";
-import { talentsPanel, talentLayout, talentPoints, bindTalents } from "../client/talents.js";
+import { talentsPanel, talentLayout, talentPoints, talentBranches, bindTalents } from "../client/talents.js";
 
 function build(at = 100) {
   return { at, configId: 1, name: "Build actif", trees: [{ id: 2, name: "Combat", nodes: [
@@ -71,10 +71,65 @@ test("tree layout preserves ordering and rank totals exclude granted ranks", () 
   assert.match(html, /Frappe/);
   assert.match(html, /1 rang\(s\) accordé\(s\)/);
   assert.match(html, /0\/1/);
+  assert.match(html, /viewBox=/);
+  assert.match(html, /data-node-id="10"/);
   assert.match(talentsPanel(null), /Build non relevé/);
   const unsafe = build(); unsafe.name = '<script>bad()</script>'; unsafe.trees[0].nodes[0].entries[1].name = '" onfocus="bad()';
   assert.ok(!talentsPanel(unsafe).includes('<script>'));
   assert.match(talentsPanel(unsafe), /&quot; onfocus=&quot;/);
+});
+
+test("talent descriptions survive validation and reject oversized or protected text", () => {
+  const input = batch();
+  input.talents.trees[0].nodes[0].entries[1].description = "Inflige des dégâts.";
+  assert.deepEqual(validateImport(input).talents, input.talents);
+  for (const description of ["x".repeat(3001), "bad\u0000"]) {
+    input.talents.trees[0].nodes[0].entries[1].description = description;
+    assert.throws(() => validateImport(input), /invalide/);
+  }
+});
+
+test("classic legacy trees become three four-column branches without losing nodes, points or links", () => {
+  const tree = { id: 2, nodes: Array.from({ length: 84 }, (_, i) => ({ id: i + 1, x: (i % 12) * 100, y: Math.floor(i / 12) * 100,
+    rank: i % 12 >= 8 ? 1 : 0, maxRank: 1, spent: i % 12 >= 8 ? 1 : 0,
+    entries: [{ id: i + 1, name: `Talent ${i + 1}` }], edges: i < 72 ? [i + 13] : [] })) };
+  const groups = talentBranches(tree, "Mage");
+  assert.deepEqual(groups.map((group) => group.name), ["Arcanes", "Feu", "Givre"]);
+  assert.deepEqual(groups.map(talentPoints), [0, 0, 28]);
+  assert.equal(new Set(groups.flatMap((group) => group.nodes.map((node) => node.id))).size, 84);
+  for (const group of groups) {
+    assert.equal(talentLayout(group).width, 352);
+    assert.equal(group.id, tree.id, "tooltip lookup keeps the original tree ID");
+    assert.ok(group.nodes.every((node) => node.edges.every((id) => group.nodes.some((target) => target.id === id))));
+  }
+  const html = talentsPanel({ at: 100, trees: [tree] }, "Mage");
+  assert.equal((html.match(/class="talent-tree /gu) ?? []).length, 3);
+  assert.match(html, /marker-end="url\(#talent-arrow-/);
+  assert.equal(new Set([...html.matchAll(/id="(talent-arrow-[^"]+)"/gu)].map((match) => match[1])).size, 3);
+  tree.nodes[0].edges.push(9);
+  assert.equal(talentBranches(tree, "Mage").length, 1, "cross-branch dependencies are never hidden");
+});
+
+test("exported branch metadata preserves names, order, icons and empty tiers", () => {
+  const input = batch(), tree = input.talents.trees[0];
+  tree.groups = [{ id: 2, name: "Givre", order: 2, icon: 123 }, { id: 1, name: "Feu", order: 1, icon: 456 }];
+  tree.nodes[0].groupId = 1; tree.nodes[0].edges = []; tree.nodes[1].groupId = 2;
+  assert.deepEqual(validateImport(input).talents, input.talents);
+  const branches = talentBranches(tree);
+  assert.deepEqual(branches.map((group) => group.name), ["Feu", "Givre"]);
+  assert.deepEqual(branches.map((group) => group.icon), [456, 123]);
+  assert.equal(talentLayout(branches[0]).height, talentLayout(branches[1]).height);
+  assert.ok(talentLayout(branches[0]).nodes[0].top < talentLayout(branches[1]).nodes[0].top);
+  for (const mutate of [
+    (tree) => tree.nodes[0].groupId = 999,
+    (tree) => delete tree.groups,
+    (tree) => tree.groups.push(tree.groups[0]),
+    (tree) => tree.groups[0].icon = -1,
+    (tree) => tree.groups[0].name = "bad\u0000",
+  ]) {
+    const bad = structuredClone(input); mutate(bad.talents.trees[0]);
+    assert.throws(() => validateImport(bad), /invalide/);
+  }
 });
 
 test("keyboard focus and touch expose the same talent detail as hover", () => {
