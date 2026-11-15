@@ -483,6 +483,9 @@ test("local HTTP transport rejects foreign hosts/origins and oversized requests"
   );
   const url = `http://127.0.0.1:${server.address().port}`;
   assert.equal((await fetch(url)).status, 200);
+  const itemSets = await fetch(url + "/item-sets.js");
+  assert.equal(itemSets.status, 200);
+  assert.match(await itemSets.text(), /export function equipmentSetLines/u);
   for (const scene of ["human", "orc", "dwarf", "nightelf", "scourge", "tauren", "skyborne"]) {
     const backdrop = await fetch(`${url}/scenes/${scene}.webp`);
     assert.equal(backdrop.status, 200);

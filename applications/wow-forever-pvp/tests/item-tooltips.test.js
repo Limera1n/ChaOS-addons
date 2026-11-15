@@ -64,6 +64,7 @@ test("shared tooltips show recipe effects, talent ranks and enchants on hover, f
   assert.equal(tooltip.style.left, "640px", "tooltip stays inside the right edge");
   assert.equal(tooltip.style.top, "670px", "tooltip stays above the bottom edge");
   recipe.handlers.pointerleave();
+  await new Promise((resolve) => setTimeout(resolve, 180));
   assert.equal(tooltip.hidden, true);
   assert.equal(recipe.attributes["aria-describedby"], undefined);
   talent.handlers.focus();
@@ -103,4 +104,23 @@ test("shared tooltips show recipe effects, talent ranks and enchants on hover, f
   free.handlers.focus();
   assert.match(lines(), /Aucun composant requis/);
   assert.ok(!lines().includes("non relevées"));
+
+  const gear = new Element({ slot: "1", quality: "4" });
+  bindEquipmentTooltips({ querySelectorAll: (selector) => selector === ".item[data-quality]" ? [gear] : [] }, [
+    { slot: 1, name: "Couronne", link: "|Hitem:1|h[Couronne]|h", tooltip: [
+      { text: "Tenue du mage (1/2)" }, { text: "Couronne", effect: true }, { text: "Robe" },
+      { text: "(1) Set: +10 Intelligence", effect: true }, { text: "(2) Set: +20 Intelligence" },
+    ] },
+  ]);
+  gear.handlers.focus();
+  assert.match(lines(), /Tenue du mage · 1\/2 équipées.*✓ CouronneÉquipé.*○ RobeNon équipé/);
+  assert.match(lines(), /✓ Actif · 1 pièce : \+10 Intelligence.*○ Inactif · 2 pièces : \+20 Intelligence/);
+  assert.equal(tooltip.children[1].className, "tooltip-line tooltip-set-header");
+  assert.equal(tooltip.children[4].className, "tooltip-line tooltip-set-bonus tooltip-set-active");
+  gear.handlers.pointerleave();
+  tooltip.handlers.pointerenter();
+  await new Promise((resolve) => setTimeout(resolve, 180));
+  assert.equal(tooltip.hidden, false, "long set tooltips remain available for scrolling");
+  tooltip.handlers.pointerleave();
+  assert.equal(tooltip.hidden, true);
 });

@@ -45,6 +45,12 @@ Elle reprend la disposition du panneau en jeu : cadre bronze, icônes seules
 autour du modèle, armes en bas et caractéristiques dans un panneau défilant
 à droite. Les noms et effets restent accessibles en infobulle et au clavier.
 Sur petit écran, les caractéristiques passent sous le vestiaire.
+Les infobulles d’équipement regroupent les pièces du même ensemble, indiquent
+les pièces équipées et distinguent les bonus actifs des seuils encore inactifs.
+Cet état correspond au dernier relevé, sans présumer du contenu des sacs ou de
+la banque. Pour récupérer les fins de fiches coupées par un ancien collecteur,
+mettre l’addon à jour puis réimporter `/cvp export`. Les longues infobulles
+peuvent défiler en passant la souris dessus.
 Le décor de la fiche suit la zone de départ de la race. Les décors sont inclus
 dans l’application pour rester disponibles lorsque le site source change de version.
 Les enchantements qui possèdent un effet visuel affichent leur halo sur le modèle 3D.

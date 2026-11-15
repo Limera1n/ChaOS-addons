@@ -1,4 +1,5 @@
 import { itemEnchantLabel } from "./armory.js";
+import { equipmentSetLines } from "./item-sets.js";
 
 const SHARDS = 256;
 const catalog = new Map();
@@ -7,7 +8,7 @@ const stats = new Map([
   ["Intellect", "Intelligence"], ["Spirit", "Esprit"], ["Armor", "Armure"],
 ]);
 const tooltip = document.querySelector("#equipment-tooltip");
-let active, pinned;
+let active, pinned, hideTimer;
 
 function translateStat(text) {
   return text.replace(/^([+-]?\d+(?:\.\d+)?) (Agility|Strength|Stamina|Intellect|Spirit|Armor)$/u,
@@ -37,7 +38,7 @@ async function itemLines(id) {
   }
   const page = await catalog.get(shard);
   const item = page?.querySelector(`template[data-id="${id}"]`)?.content.querySelector(".tip");
-  return [...(item?.children ?? [])].filter((line) => !line.classList.contains("tip-name")).slice(0, 24)
+  return [...(item?.children ?? [])].filter((line) => !line.classList.contains("tip-name")).slice(0, 64)
     .map((line) => ({
       text: translateStat((line.classList.contains("tip-pair") ? line.firstElementChild : line)?.textContent.trim() ?? ""),
       right: line.classList.contains("tip-pair") ? line.children[1]?.textContent.trim() : null,
@@ -64,16 +65,29 @@ function positionTooltip() {
 }
 
 export function hideEquipmentTooltip() {
+  clearTimeout(hideTimer);
   active?.removeAttribute("aria-describedby");
   active = null;
   pinned = false;
   tooltip.hidden = true;
 }
 
-function addLine({ text, right, effect }, className) {
+function addLine({ text, right, effect, set }, className) {
   if (!text && !right) return;
   const line = document.createElement("div");
   line.className = className ?? (effect ? "tooltip-line tooltip-effect" : "tooltip-line");
+  if (set) {
+    line.className = `tooltip-line tooltip-set-${set.kind}`;
+    if (set.kind === "header") text = `${set.name} · ${set.count}/${set.total} équipées`;
+    else if (set.kind === "piece") {
+      line.className += set.equipped ? " tooltip-set-active" : " tooltip-set-inactive";
+      text = `${set.equipped ? "✓" : "○"} ${text.trim()}`;
+      right = set.equipped ? "Équipé" : "Non équipé";
+    } else {
+      line.className += set.active ? " tooltip-set-active" : " tooltip-set-inactive";
+      text = `${set.active ? "✓ Actif" : "○ Inactif"} · ${set.required} pièce${set.required === 1 ? "" : "s"} : ${set.description}`;
+    }
+  }
   line.textContent = text?.replace(/\|n/gu, "\n");
   if (right) {
     const value = document.createElement("span");
@@ -132,7 +146,8 @@ function addRecipeReagents(item) {
   }
 }
 
-async function showTooltip(row, item) {
+async function showTooltip(row, item, equipment) {
+  clearTimeout(hideTimer);
   if (active === row) return;
   hideEquipmentTooltip();
   active = row;
@@ -141,11 +156,12 @@ async function showTooltip(row, item) {
   tooltip.hidden = false;
   const title = { text: item.name ?? row.querySelector("strong")?.textContent ?? row.getAttribute("aria-label") };
   tooltip.replaceChildren();
+  tooltip.scrollTop = 0;
   addLine(title, "tooltip-name");
   if (item.detail) addLine({ text: item.detail }, "tooltip-source");
   if (item.tooltip?.length) {
     let isTransmogName = false;
-    for (const line of item.tooltip) {
+    for (const line of equipment ? equipmentSetLines(item.tooltip, equipment) : item.tooltip) {
       // Spell tooltips can omit reagent counts. Use the recipe's structured costs.
       if (item.recipe && /^(?:reagents|composants|réactifs)\s*:/iu.test(line.text.trim())) continue;
       const isTransmogHeader = /^(?:Transmogrified to|Transmogrifié en|Transmogrification)\s*:/iu.test(line.text.trim());
@@ -168,7 +184,7 @@ async function showTooltip(row, item) {
   if (active !== row) return;
   tooltip.replaceChildren();
   addLine(title, "tooltip-name");
-  for (const line of lines) addLine(line);
+  for (const line of equipment ? equipmentSetLines(lines, equipment, { base: true }) : lines) addLine(line);
   addRecipeReagents(item);
   const enchant = itemEnchantLabel(item);
   if (enchant) addLine({ text: enchant, effect: true });
@@ -176,15 +192,20 @@ async function showTooltip(row, item) {
   positionTooltip();
 }
 
-function bindTooltip(row, item) {
+function bindTooltip(row, item, equipment) {
   if (!item) return;
   row.addEventListener("pointerenter", (event) => {
-    if (event.pointerType !== "touch") showTooltip(row, item);
+    clearTimeout(hideTimer);
+    if (event.pointerType !== "touch") showTooltip(row, item, equipment);
   });
   row.addEventListener("pointerleave", () => {
-    if (active === row && !pinned && !row.matches(":focus-visible")) hideEquipmentTooltip();
+    if (active === row && !pinned && !row.matches(":focus-visible")) {
+      hideTimer = setTimeout(() => {
+        if (active === row && !tooltip.matches(":hover")) hideEquipmentTooltip();
+      }, 150);
+    }
   });
-  row.addEventListener("focus", () => showTooltip(row, item));
+  row.addEventListener("focus", () => showTooltip(row, item, equipment));
   row.addEventListener("blur", () => {
     if (active === row && !row.matches(":hover")) hideEquipmentTooltip();
   });
@@ -193,7 +214,7 @@ function bindTooltip(row, item) {
     event.stopPropagation();
     if (active === row && pinned) hideEquipmentTooltip();
     else {
-      showTooltip(row, item);
+      showTooltip(row, item, equipment);
       pinned = true;
     }
   });
@@ -202,7 +223,7 @@ function bindTooltip(row, item) {
 export function bindEquipmentTooltips(profile, equipment) {
   const items = new Map(equipment.map((item) => [item.slot, item]));
   for (const row of profile.querySelectorAll(".item[data-quality]")) {
-    bindTooltip(row, items.get(Number(row.dataset.slot)));
+    bindTooltip(row, items.get(Number(row.dataset.slot)), equipment);
   }
   for (const enchant of profile.querySelectorAll(".item-enchant")) {
     bindTooltip(enchant, { name: "Enchantement", description: enchant.textContent });
@@ -228,11 +249,17 @@ export function bindProfileTooltips(profile, professions, talents) {
   }
 }
 
+tooltip.addEventListener("pointerenter", () => clearTimeout(hideTimer));
+tooltip.addEventListener("pointerleave", () => {
+  if (!pinned && !active?.matches(":focus-visible")) hideEquipmentTooltip();
+});
+tooltip.addEventListener("wheel", (event) => event.stopPropagation());
+
 document.addEventListener("keydown", (event) => {
   if (event.key === "Escape" && active) hideEquipmentTooltip();
 });
 document.addEventListener("pointerdown", (event) => {
-  if (pinned && active && !active.contains(event.target)) hideEquipmentTooltip();
+  if (pinned && active && !active.contains(event.target) && !tooltip.contains(event.target)) hideEquipmentTooltip();
 });
 window.addEventListener("scroll", positionTooltip, true);
 window.addEventListener("resize", positionTooltip);

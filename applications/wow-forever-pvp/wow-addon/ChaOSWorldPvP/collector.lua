@@ -193,7 +193,7 @@ local function equippedTooltip(slot)
                 if left then
                     result[#result + 1] = { text = left, right = right, effect = effect or nil }
                 end
-                if #result >= 20 then break end
+                if #result >= 64 then break end
             end
         end
         if #result > 0 then return result end

@@ -359,12 +359,18 @@ CreateFrame, GetInventoryItemID, C_Transmog.GetItemIDForSource = originalCreateF
 C_TransmogOutfitInfo = nil
 C_TransmogCollection.GetSourceInfo = nil
 C_TooltipInfo = { GetInventoryItem = function()
-    return { lines = {
+    local lines = {
         { leftText = "Test Hat" },
         { leftText = " |cff00ff00+2 Agilité|r ", leftColor = { r = 0, g = 1, b = 0 } },
         { leftText = "Tête", rightText = "Tissu" },
         { leftText = secret },
-    } }
+    }
+    for index = 1, 22 do lines[#lines + 1] = { leftText = "Stat " .. index } end
+    lines[#lines + 1] = { leftText = "Tenue du mage (1/2)" }
+    lines[#lines + 1] = { leftText = "Test Hat", leftColor = { r = 0, g = 1, b = 0 } }
+    lines[#lines + 1] = { leftText = "Test Robe" }
+    lines[#lines + 1] = { leftText = "(2) Set: Bonus final" }
+    return { lines = lines }
 end }
 SlashCmdList.CHAOSWORLDPVP("export")
 local payload
@@ -403,6 +409,7 @@ assert(not payload:find('|', 1, true), "WoW must not interpret any pipe as marku
 assert(payload:find('"transmogItemId":456'))
 assert(payload:find('"playedSeconds":123456') and payload:find('"playedAt":'))
 assert(payload:find('"text":"+2 Agilité"', 1, true) and payload:find('"right":"Tissu"', 1, true))
+assert(payload:find('"text":"(2) Set: Bonus final"', 1, true), "Set bonuses beyond line 20 must survive export")
 assert(not profile.snapshots[#profile.snapshots].equipment[1].tooltip, "Tooltips must not accumulate in the export history")
 assert(payload:find('"cause":"pve"') and payload:find('"source":"Fatal pet"'))
 assert(payload:find('\\u0022Hat\\u0022'))

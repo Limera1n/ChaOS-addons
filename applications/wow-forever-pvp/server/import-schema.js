@@ -304,7 +304,7 @@ export function validateImport(input) {
         ...(slot.icon == null ? {} : { icon: integer(slot.icon, 1000000000) }),
         ...(slot.quality == null ? {} : { quality: integer(slot.quality, 8) }),
         ...(slot.tooltip == null ? {} : {
-          tooltip: list(slot.tooltip, 20).map((line) => {
+          tooltip: list(slot.tooltip, 64).map((line) => {
             record(line);
             return {
               text: string(line.text, 300),

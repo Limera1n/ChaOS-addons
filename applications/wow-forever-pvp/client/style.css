@@ -566,7 +566,8 @@ select {
   width: max-content;
   max-width: min(325px, calc(100vw - 20px));
   max-height: calc(100vh - 20px);
-  overflow: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
   padding: 10px 12px;
   border: 1px solid #857754;
   border-radius: 4px;
@@ -575,7 +576,7 @@ select {
   color: #f2ede3;
   font: 14px/1.35 Calibri, sans-serif;
   overflow-wrap: anywhere;
-  pointer-events: none;
+  pointer-events: auto;
 }
 .tooltip-name {
   margin-bottom: 4px;
@@ -591,6 +592,12 @@ select {
 }
 .tooltip-effect { color: #6be553; }
 .tooltip-transmog { color: #ff80ff; }
+.tooltip-set-header { margin-top: 9px; padding-top: 7px; border-top: 1px solid #85775480; color: #ffd36b; font-weight: 700; }
+.tooltip-set-piece { padding-top: 3px; font-size: 12px; }
+.tooltip-set-piece > span { flex-shrink: 0; font-size: 11px; }
+.tooltip-set-bonus { display: block; margin-top: 6px; }
+.tooltip-set-active { color: #6be553; }
+.tooltip-set-inactive { color: #b6ab97; }
 .tooltip-reagent { display: flex; align-items: center; flex-wrap: wrap; gap: 3px 5px; margin-top: 4px; }
 .tooltip-reagent-option { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
 .tooltip-reagent-icon { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; flex: 0 0 18px; overflow: hidden; border: 1px solid #8d7951; border-radius: 2px; background: #232528; box-sizing: content-box; }
